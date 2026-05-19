@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 
 	"ai-interation/internal/config"
 	"ai-interation/internal/httpapi"
@@ -13,6 +14,10 @@ import (
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		log.Println(".env file not found, using system environment variables")
+	}
+
 	cfg := config.Load()
 
 	aiClient, err := openai.NewClientFromEnv()
