@@ -86,7 +86,7 @@ async function submitQuestionnaire() {
       monthlyFoodBudget,
     })
 
-    await router.push('/profile')
+    await router.push('/')
   } catch (error) {
     if (shouldFallbackToLocal(error)) {
       userStore.updateQuestionnaire({
@@ -98,7 +98,7 @@ async function submitQuestionnaire() {
       })
 
       infoMessage.value = 'The profile API is temporarily unavailable, so your data was saved locally. You can save it to the database again from Profile after the backend recovers.'
-      await router.push('/profile')
+      await router.push('/')
       return
     }
 

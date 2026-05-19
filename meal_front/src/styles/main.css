@@ -110,6 +110,24 @@ input {
   font-weight: 700;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.dashboard-link {
+  border: 1px solid #1f6f63;
+  border-radius: 6px;
+  color: #1f6f63;
+  padding: 0.58rem 0.85rem;
+  text-decoration: none;
+}
+
+.dashboard-link:hover {
+  background: #eef8f5;
+}
+
 .avatar-link {
   display: grid;
   width: 2.5rem;

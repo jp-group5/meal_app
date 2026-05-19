@@ -18,15 +18,17 @@ const { initials, isLoggedIn, name } = storeToRefs(userStore)
           <strong>Meal App</strong>
         </div>
 
-        <RouterLink
-          v-if="isLoggedIn"
-          class="avatar-link"
-          to="/profile"
-          aria-label="Open profile page"
-          :title="name"
-        >
-          {{ initials || 'U' }}
-        </RouterLink>
+        <div v-if="isLoggedIn" class="topbar-actions">
+          <RouterLink class="dashboard-link" to="/">Dashboard</RouterLink>
+          <RouterLink
+            class="avatar-link"
+            to="/profile"
+            aria-label="Open profile page"
+            :title="name"
+          >
+            {{ initials || 'U' }}
+          </RouterLink>
+        </div>
 
         <RouterLink v-else class="login-link" to="/login">Log in</RouterLink>
       </header>
