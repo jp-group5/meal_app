@@ -15,6 +15,11 @@ import (
 )
 
 func main() {
+	//read .env to get API key
+	if err := godotenv.Load(); err != nil {
+		log.Println(".env file not found, using system environment variables")
+	}
+
 	dsn := os.Getenv("DB_DSN")
 	jwtSecret := os.Getenv("JWT_SECRET")
 
@@ -75,6 +80,9 @@ func main() {
 
 		authed.POST("/recommendations", nutritionHandler.GetRecommendation)
 		authed.GET("/recommendations/prompt", nutritionHandler.PreviewRecommendationPrompt)
+
+		// analyze image of meal by AI
+		authed.POST("/meals/analyze-image", nutritionHandler.AnalyzeMealImage)
 	}
 
 	if err := r.Run(":8080"); err != nil {
