@@ -90,6 +90,7 @@ async function saveProfile() {
     })
 
     saveSuccess.value = 'Profile has been updated.'
+    await router.push('/')
   } catch (error) {
     if (error instanceof Error && error.message) {
       saveError.value = error.message
