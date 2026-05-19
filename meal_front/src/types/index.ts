@@ -40,6 +40,9 @@ export interface Meal {
   type: MealType
   content: string
   calories?: number
+  protein?: number
+  fat?: number
+  carbs?: number
 }
 
 export interface MealRecommendation {
