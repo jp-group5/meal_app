@@ -31,11 +31,23 @@ const googleEvents = ref<CalendarDisplayEvent[]>([])
 const detailDate = ref<string | null>(null)
 const isAiDrawerOpen = ref(false)
 const formMessage = ref('')
+const imageInput = ref<HTMLInputElement | null>(null)
+const aiImageLoading = ref(false)
+const aiImageResult = ref<{
+  content: string
+  calories: string
+  protein: string
+  fat: string
+  carbs: string
+} | null>(null)
 
 const mealForm = reactive({
   type: 'breakfast' as MealType,
   content: '',
   calories: '',
+  protein: '',
+  fat: '',
+  carbs: '',
 })
 
 const hasDetailDate = computed(() => Boolean(detailDate.value))
@@ -108,14 +120,22 @@ function addMealRecord() {
 
   const content = mealForm.content.trim()
   const calories = mealForm.calories ? Number(mealForm.calories) : undefined
+  const protein = mealForm.protein ? Number(mealForm.protein) : undefined
+  const fat = mealForm.fat ? Number(mealForm.fat) : undefined
+  const carbs = mealForm.carbs ? Number(mealForm.carbs) : undefined
 
   if (!content) {
     formMessage.value = 'Please enter meal details.'
     return
   }
 
-  if (calories !== undefined && (!Number.isFinite(calories) || calories < 0)) {
+  if (!isValidNutritionValue(calories)) {
     formMessage.value = 'Please enter a valid calorie value.'
+    return
+  }
+
+  if (!isValidNutritionValue(protein) || !isValidNutritionValue(fat) || !isValidNutritionValue(carbs)) {
+    formMessage.value = 'Please enter valid nutrition values.'
     return
   }
 
@@ -126,14 +146,102 @@ function addMealRecord() {
       type: mealForm.type,
       content,
       calories,
+      protein,
+      fat,
+      carbs,
     },
     ...localMeals.value,
   ]
 
   saveLocalMeals()
+  resetMealForm()
+  aiImageResult.value = null
+  formMessage.value = 'Meal record saved locally.'
+}
+
+function openImageUpload() {
+  imageInput.value?.click()
+}
+
+async function handleImageUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+
+  if (!file) {
+    return
+  }
+
+  formMessage.value = ''
+  aiImageLoading.value = true
+
+  try {
+    aiImageResult.value = await mockAnalyzeMealImage(file)
+    formMessage.value = 'Mock AI analyzed the image. Review and apply the result.'
+  } finally {
+    aiImageLoading.value = false
+    input.value = ''
+  }
+}
+
+function applyAiImageResult() {
+  if (!aiImageResult.value) {
+    return
+  }
+
+  mealForm.content = aiImageResult.value.content
+  mealForm.calories = aiImageResult.value.calories
+  mealForm.protein = aiImageResult.value.protein
+  mealForm.fat = aiImageResult.value.fat
+  mealForm.carbs = aiImageResult.value.carbs
+  formMessage.value = 'Mock AI result applied. You can edit it before saving.'
+}
+
+async function mockAnalyzeMealImage(file: File) {
+  console.info('Mock analyze meal image:', file.name)
+
+  await wait(700)
+
+  const fileName = file.name.toLowerCase()
+
+  if (fileName.includes('salad')) {
+    return {
+      content: 'Chicken Salad Bowl',
+      calories: '430',
+      protein: '32',
+      fat: '18',
+      carbs: '34',
+    }
+  }
+
+  if (fileName.includes('rice') || fileName.includes('bowl')) {
+    return {
+      content: 'Rice Bowl with Grilled Meat',
+      calories: '680',
+      protein: '38',
+      fat: '24',
+      carbs: '78',
+    }
+  }
+
+  return {
+    content: 'Mixed Meal Plate',
+    calories: '560',
+    protein: '28',
+    fat: '20',
+    carbs: '62',
+  }
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function resetMealForm() {
   mealForm.content = ''
   mealForm.calories = ''
-  formMessage.value = 'Meal record saved locally.'
+  mealForm.protein = ''
+  mealForm.fat = ''
+  mealForm.carbs = ''
 }
 
 function deleteMealRecord(mealId: string) {
@@ -171,6 +279,9 @@ function handleRecommendationAccepted(payload: {
       type: 'dinner',
       content: payload.name,
       calories: payload.calories,
+      protein: 32,
+      fat: 18,
+      carbs: 42,
     },
     ...localMeals.value,
   ]
@@ -186,6 +297,9 @@ function createFallbackMeals(date: string): Meal[] {
       type: 'breakfast',
       content: 'Greek Yogurt + Berries',
       calories: 320,
+      protein: 22,
+      fat: 8,
+      carbs: 42,
     },
     {
       id: `${date}-lunch`,
@@ -193,6 +307,9 @@ function createFallbackMeals(date: string): Meal[] {
       type: 'lunch',
       content: 'Chicken Brown Rice Bowl',
       calories: 560,
+      protein: 38,
+      fat: 14,
+      carbs: 68,
     },
   ]
 }
@@ -203,6 +320,10 @@ function toTitleCase(value: string) {
 
 function canDeleteMeal(meal: Meal) {
   return meal.id.startsWith('local-') || meal.id.startsWith('ai-')
+}
+
+function isValidNutritionValue(value: number | undefined) {
+  return value === undefined || (Number.isFinite(value) && value >= 0)
 }
 </script>
 
@@ -272,17 +393,50 @@ function canDeleteMeal(meal: Meal) {
           </div>
 
           <form class="meal-form" @submit.prevent="addMealRecord">
-            <select v-model="mealForm.type" aria-label="Meal type">
-              <option value="breakfast">Breakfast</option>
-              <option value="lunch">Lunch</option>
-              <option value="dinner">Dinner</option>
-              <option value="snack">Snack</option>
-            </select>
+            <div class="meal-form-main">
+              <select v-model="mealForm.type" aria-label="Meal type">
+                <option value="breakfast">Breakfast</option>
+                <option value="lunch">Lunch</option>
+                <option value="dinner">Dinner</option>
+                <option value="snack">Snack</option>
+              </select>
 
-            <input v-model="mealForm.content" aria-label="Meal details" placeholder="Meal details" />
-            <input v-model="mealForm.calories" aria-label="Calories" inputmode="numeric" placeholder="Calories" />
-            <button type="submit">Add record</button>
+              <input v-model="mealForm.content" aria-label="Meal details" placeholder="Meal details" />
+            </div>
+
+            <div class="meal-form-nutrients">
+              <input v-model="mealForm.calories" aria-label="Calories" inputmode="numeric" placeholder="Calories" />
+              <input v-model="mealForm.protein" aria-label="Protein" inputmode="decimal" placeholder="Protein g" />
+              <input v-model="mealForm.fat" aria-label="Fat" inputmode="decimal" placeholder="Fat g" />
+              <input v-model="mealForm.carbs" aria-label="Carbs" inputmode="decimal" placeholder="Carbs g" />
+              <button type="submit">Add record</button>
+            </div>
           </form>
+
+          <div class="image-ai-tools">
+            <button type="button" class="button-outline" :disabled="aiImageLoading" @click="openImageUpload">
+              {{ aiImageLoading ? 'Analyzing image...' : 'Upload image for mock AI' }}
+            </button>
+            <input
+              ref="imageInput"
+              class="visually-hidden"
+              type="file"
+              accept="image/*"
+              @change="handleImageUpload"
+            />
+          </div>
+
+          <section v-if="aiImageResult" class="ai-image-result">
+            <div>
+              <p class="label">Mock AI result</p>
+              <strong>{{ aiImageResult.content }}</strong>
+              <p class="subtle-text">
+                {{ aiImageResult.calories }} kcal / P {{ aiImageResult.protein }}g / F
+                {{ aiImageResult.fat }}g / C {{ aiImageResult.carbs }}g
+              </p>
+            </div>
+            <button type="button" class="button-outline" @click="applyAiImageResult">Apply to form</button>
+          </section>
 
           <p v-if="formMessage" class="info-message">{{ formMessage }}</p>
 
@@ -293,7 +447,10 @@ function canDeleteMeal(meal: Meal) {
                 <p class="meal-content">{{ meal.content }}</p>
               </div>
               <div class="meal-actions">
-                <strong class="meal-calories">{{ meal.calories ?? '--' }} kcal</strong>
+                <div class="nutrition-stack">
+                  <strong class="meal-calories">{{ meal.calories ?? '--' }} kcal</strong>
+                  <span>P {{ meal.protein ?? '--' }}g / F {{ meal.fat ?? '--' }}g / C {{ meal.carbs ?? '--' }}g</span>
+                </div>
                 <button
                   v-if="canDeleteMeal(meal)"
                   type="button"
@@ -421,9 +578,27 @@ function canDeleteMeal(meal: Meal) {
 
 .meal-form {
   display: grid;
-  grid-template-columns: minmax(120px, 0.75fr) minmax(180px, 1.4fr) minmax(100px, 0.7fr) auto;
-  gap: 0.6rem;
+  gap: 0.7rem;
   margin-bottom: 0.8rem;
+}
+
+.meal-form-main,
+.meal-form-nutrients {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.meal-form-main {
+  grid-template-columns: minmax(120px, 0.36fr) minmax(220px, 1fr);
+}
+
+.meal-form-nutrients {
+  grid-template-columns: repeat(4, minmax(96px, 1fr)) minmax(112px, auto);
+}
+
+.meal-form-nutrients button {
+  min-width: 112px;
+  white-space: nowrap;
 }
 
 select {
@@ -452,6 +627,39 @@ select {
   color: #124740;
   padding: 0.6rem 0.75rem;
   font-size: 0.86rem;
+}
+
+.image-ai-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 0.8rem;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.ai-image-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  background: #f7fbfa;
+  padding: 0.75rem;
+  margin-bottom: 0.8rem;
+}
+
+.ai-image-result strong {
+  display: block;
+  margin-bottom: 0.22rem;
 }
 
 .subtle-text {
@@ -497,6 +705,15 @@ select {
 .meal-calories {
   color: #263241;
   font-size: 0.95rem;
+  white-space: nowrap;
+}
+
+.nutrition-stack {
+  display: grid;
+  gap: 0.18rem;
+  justify-items: end;
+  color: #5c6a78;
+  font-size: 0.78rem;
   white-space: nowrap;
 }
 
@@ -551,6 +768,16 @@ select {
 
   .meal-form {
     grid-template-columns: 1fr;
+  }
+
+  .meal-form-main,
+  .meal-form-nutrients {
+    grid-template-columns: 1fr;
+  }
+
+  .ai-image-result {
+    align-items: stretch;
+    flex-direction: column;
   }
 }
 
