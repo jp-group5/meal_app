@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"io"
 
 	"meal_back/models"
 	"meal_back/pkg/response"
@@ -408,8 +409,17 @@ func (h *NutritionHandler) GetRecommendation(c *gin.Context) {
 		response.Error(c, http.StatusInternalServerError, codeNutritionDBError, "Failed to build recommendation context.")
 		return
 	}
-
+	
+	//Change to use AI
+	"""
 	recommendation := buildRecommendationFromPrompt(targetDate, promptData)
+	response.Success(c, http.StatusOK, recommendation)
+	"""
+	recommendation, err := h.buildRecommendationWithAI(c.Request.Context(), targetDate, promptData)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, codeNutritionDBError, err.Error())
+		return
+	}
 	response.Success(c, http.StatusOK, recommendation)
 }
 
@@ -987,4 +997,65 @@ func firstNotEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// analyze image of meal by AI
+func (h *NutritionHandler) AnalyzeMealImage(c *gin.Context) {
+	userID, ok := getUserIDFromContext(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, codeAuthFailed, "Missing user identity in context.")
+		return
+	}
+
+	file, _, err := c.Request.FormFile("image")
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, codeNutritionInvalidParam, "image is required.")
+		return
+	}
+	defer file.Close()
+
+	imageBytes, err := io.ReadAll(file)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, codeNutritionInvalidParam, "Failed to read image.")
+		return
+	}
+
+	mealDateRaw := strings.TrimSpace(c.PostForm("date"))
+	if mealDateRaw == "" {
+		mealDateRaw = time.Now().In(time.FixedZone("Asia/Tokyo", 9*60*60)).Format(dateLayout)
+	}
+
+	mealDate, err := parseDate(mealDateRaw)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, codeNutritionInvalidParam, err.Error())
+		return
+	}
+
+	analysis, err := analyzeMealImageWithAI(c.Request.Context(), imageBytes)
+	if err != nil {
+		response.Error(c, http.StatusInternalServerError, codeNutritionDBError, err.Error())
+		return
+	}
+
+	record := models.MealRecord{
+		UserID:   userID,
+		Date:     mealDate.Format(dateLayout),
+		Type:     "meal",
+		Content:  strings.Join(analysis.Contents, ", "),
+		Calories: analysis.TotalNutrition.Calories,
+		Protein:  analysis.TotalNutrition.Protein,
+		Carbs:    analysis.TotalNutrition.Carbs,
+		Fat:      analysis.TotalNutrition.Fat,
+		Source:   "ai_image",
+	}
+
+	if err := h.db.Create(&record).Error; err != nil {
+		response.Error(c, http.StatusInternalServerError, codeNutritionDBError, "Failed to save meal analysis.")
+		return
+	}
+
+	response.Success(c, http.StatusOK, gin.H{
+		"analysis": analysis,
+		"meal":     toMealPayload(record),
+	})
 }
