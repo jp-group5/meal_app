@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from 'vue';
-import { gapi } from 'gapi-script';
+import { nextTick, onMounted, reactive, ref, watch } from 'vue';
 import FullCalendar from '@fullcalendar/vue3';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import type { MealType } from '@/types';
@@ -15,6 +14,59 @@ interface CalendarDisplayEvent {
   description?: string
   location?: string
   htmlLink?: string
+}
+
+interface GoogleCalendarApiEvent {
+  id?: string
+  summary?: string
+  start?: {
+    dateTime?: string
+    date?: string
+  }
+  end?: {
+    dateTime?: string
+    date?: string
+  }
+  description?: string
+  location?: string
+  htmlLink?: string
+}
+
+interface GoogleCalendarEventsResponse {
+  items?: GoogleCalendarApiEvent[]
+  error?: {
+    message?: string
+  }
+}
+
+interface GoogleTokenResponse {
+  access_token?: string
+  error?: string
+  error_description?: string
+}
+
+interface GoogleAuthError {
+  type?: string
+  message?: string
+}
+
+interface GoogleTokenClient {
+  requestAccessToken: () => void
+}
+
+interface GoogleOAuth2 {
+  initTokenClient: (config: {
+    client_id: string
+    scope: string
+    callback: (tokenResponse: GoogleTokenResponse) => void | Promise<void>
+    error_callback?: (error: GoogleAuthError) => void
+  }) => GoogleTokenClient
+}
+
+interface GoogleIdentityNamespace {
+  accounts?: {
+    oauth2?: GoogleOAuth2
+  }
 }
 
 const props = withDefaults(
@@ -34,7 +86,8 @@ const emit = defineEmits<{
 }>();
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
-const SCOPES = 'https://www.googleapis.com/auth/calendar';
+const SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
+const GOOGLE_CALENDAR_EVENTS_URL = 'https://www.googleapis.com/calendar/v3/calendars/primary/events';
 const DEFAULT_MEAL_COLOR = '#6b7280';
 const MEAL_TYPE_COLORS: Record<MealType, string> = {
   breakfast: '#c46a18',
@@ -46,6 +99,7 @@ const MEAL_TYPE_COLORS: Record<MealType, string> = {
 const googleEvents = ref<CalendarDisplayEvent[]>([]);
 const isAuthReady = ref(false);
 const authMessage = ref('');
+const calendarWrapper = ref<HTMLElement | null>(null);
 
 const calendarOptions = reactive({
   plugins: [dayGridPlugin],
@@ -64,9 +118,12 @@ const calendarOptions = reactive({
       info.el.setAttribute('data-event-date', eventDate);
     }
   },
+  datesSet: () => {
+    syncSelectedDateHighlight();
+  },
 });
 
-let tokenClient: any;
+let tokenClient: GoogleTokenClient | undefined;
 
 watch(
   () => props.mealEvents,
@@ -74,6 +131,14 @@ watch(
     syncCalendarEvents();
   },
   { deep: true, immediate: true },
+);
+
+watch(
+  () => props.selectedDate,
+  () => {
+    syncSelectedDateHighlight();
+  },
+  { immediate: true },
 );
 
 onMounted(() => {
@@ -86,21 +151,16 @@ const handleAuth = () => {
     return;
   }
 
+  authMessage.value = '';
   tokenClient.requestAccessToken();
 };
 
-async function initializeGoogleCalendar() {
-  gapi.load('client', async () => {
-    try {
-      await gapi.client.init({
-        discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'],
-      });
-    } catch (error) {
-      authMessage.value = 'Google Calendar API could not be initialized.';
-      console.error('Calendar client initialization error:', error);
-    }
-  });
+function handleDateInput(event: Event) {
+  const target = event.target as HTMLInputElement;
+  emit('date-selected', target.value);
+}
 
+async function initializeGoogleCalendar() {
   if (!CLIENT_ID) {
     authMessage.value = 'Google Calendar client ID is not configured.';
     return;
@@ -116,13 +176,24 @@ async function initializeGoogleCalendar() {
   tokenClient = googleOAuth.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
-    callback: async (tokenResponse: any) => {
+    callback: async (tokenResponse) => {
       if (tokenResponse.error !== undefined) {
         console.error('Login error:', tokenResponse);
+        authMessage.value =
+          tokenResponse.error_description ?? `Google Calendar sign-in failed: ${tokenResponse.error}`;
         return;
       }
 
-      await listEvents();
+      if (!tokenResponse.access_token) {
+        authMessage.value = 'Google Calendar sign-in completed, but no access token was returned.';
+        return;
+      }
+
+      await listEvents(tokenResponse.access_token);
+    },
+    error_callback: (error) => {
+      authMessage.value = getGoogleAuthErrorMessage(error);
+      console.error('Login popup error:', error);
     },
   });
 
@@ -130,31 +201,54 @@ async function initializeGoogleCalendar() {
   authMessage.value = '';
 }
 
-const listEvents = async () => {
+const listEvents = async (accessToken: string) => {
   try {
-    const response = await gapi.client.calendar.events.list({
-      calendarId: 'primary',
-      timeMin: new Date(new Date().setMonth(new Date().getMonth() - 1)).toISOString(),
-      showDeleted: false,
-      singleEvents: true,
-      maxResults: 100,
+    const timeMin = new Date();
+    timeMin.setMonth(timeMin.getMonth() - 1);
+
+    const url = new URL(GOOGLE_CALENDAR_EVENTS_URL);
+    url.search = new URLSearchParams({
+      timeMin: timeMin.toISOString(),
+      showDeleted: 'false',
+      singleEvents: 'true',
+      maxResults: '100',
       orderBy: 'startTime',
+    }).toString();
+
+    const response = await fetch(url.toString(), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     });
 
-    googleEvents.value = response.result.items.map((event: any) => ({
-      id: event.id,
-      title: event.summary ?? '(Untitled event)',
-      date: toDateKey(event.start.dateTime || event.start.date),
-      start: event.start.dateTime || event.start.date,
-      end: event.end?.dateTime || event.end?.date,
-      description: event.description,
-      location: event.location,
-      htmlLink: event.htmlLink,
-    }));
+    const result = (await response.json()) as GoogleCalendarEventsResponse;
 
+    if (!response.ok) {
+      throw new Error(result.error?.message ?? `Google Calendar request failed (${response.status})`);
+    }
+
+    googleEvents.value = (result.items ?? []).map((event, index) => {
+      const start = event.start?.dateTime ?? event.start?.date ?? '';
+      const end = event.end?.dateTime ?? event.end?.date;
+
+      return {
+        id: event.id ?? `google-event-${index}-${start}`,
+        title: event.summary ?? '(Untitled event)',
+        date: toDateKey(start),
+        start,
+        end,
+        description: event.description,
+        location: event.location,
+        htmlLink: event.htmlLink,
+      };
+    });
+
+    authMessage.value = '';
     emit('events-loaded', googleEvents.value);
     syncCalendarEvents();
   } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error';
+    authMessage.value = `Google Calendar events could not be loaded: ${message}`;
     console.error('Calendar fetch error:', err);
   }
 };
@@ -215,16 +309,53 @@ function handleCalendarClick(event: MouseEvent) {
   }
 }
 
+function syncSelectedDateHighlight() {
+  void nextTick(() => {
+    const wrapper = calendarWrapper.value;
+
+    if (!wrapper) {
+      return;
+    }
+
+    wrapper.querySelectorAll<HTMLElement>('.fc-daygrid-day.is-selected-date').forEach((day) => {
+      day.classList.remove('is-selected-date');
+    });
+
+    if (!props.selectedDate) {
+      return;
+    }
+
+    wrapper.querySelectorAll<HTMLElement>('.fc-daygrid-day[data-date]').forEach((day) => {
+      if (day.dataset.date === props.selectedDate) {
+        day.classList.add('is-selected-date');
+      }
+    });
+  });
+}
+
 function getMealColor(mealType: MealType | undefined) {
   return mealType ? MEAL_TYPE_COLORS[mealType] : DEFAULT_MEAL_COLOR;
 }
 
+function getGoogleAuthErrorMessage(error: GoogleAuthError) {
+  if (error.type === 'popup_failed_to_open') {
+    return 'Google sign-in popup could not open. Allow pop-ups and try again.';
+  }
+
+  if (error.type === 'popup_closed') {
+    return 'Google sign-in was closed before authorization finished.';
+  }
+
+  return error.message ?? 'Google Calendar sign-in could not be completed.';
+}
+
 function waitForGoogleOAuth() {
-  return new Promise<any | null>((resolve) => {
+  return new Promise<GoogleOAuth2 | null>((resolve) => {
     let attempts = 0;
 
     const checkGoogleOAuth = () => {
-      const googleOAuth = (window as any).google?.accounts?.oauth2;
+      const googleOAuth = (window as Window & { google?: GoogleIdentityNamespace }).google?.accounts
+        ?.oauth2;
 
       if (googleOAuth) {
         resolve(googleOAuth);
@@ -280,7 +411,17 @@ function toLocalDateKey(date: Date) {
   <div class="calendar-container">
     <div class="header-actions">
       <h2>Google Calendar integration</h2>
-      <button class="auth-button" type="button" :disabled="!isAuthReady" @click="handleAuth">Access calendar</button>
+      <div class="calendar-toolbar">
+        <input
+          :value="selectedDate"
+          type="date"
+          aria-label="Select date"
+          @input="handleDateInput"
+        />
+        <button class="auth-button" type="button" :disabled="!isAuthReady" @click="handleAuth">
+          Access calendar
+        </button>
+      </div>
     </div>
 
     <p class="calendar-hint">
@@ -288,7 +429,7 @@ function toLocalDateKey(date: Date) {
     </p>
     <p v-if="authMessage" class="auth-message">{{ authMessage }}</p>
     
-    <div class="calendar-wrapper" @click="handleCalendarClick">
+    <div ref="calendarWrapper" class="calendar-wrapper" @click="handleCalendarClick">
       <FullCalendar :options="calendarOptions" />
     </div>
   </div>
@@ -307,6 +448,12 @@ function toLocalDateKey(date: Date) {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 1rem;
+}
+
+.calendar-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
 }
 
 .header-actions h2 {
@@ -362,5 +509,24 @@ function toLocalDateKey(date: Date) {
 :deep(.fc-daygrid-day),
 :deep(.fc-event) {
   cursor: pointer;
+}
+
+:deep(.fc-daygrid-day.is-selected-date) {
+  background: #eef9f6;
+  box-shadow: inset 0 0 0 2px #0f766e;
+}
+
+:deep(.fc-daygrid-day.is-selected-date .fc-daygrid-day-frame) {
+  background: linear-gradient(180deg, rgba(15, 118, 110, 0.12), rgba(15, 118, 110, 0.03));
+}
+
+:deep(.fc-daygrid-day.is-selected-date .fc-daygrid-day-number) {
+  margin: 0.25rem;
+  min-width: 1.8rem;
+  border-radius: 999px;
+  background: #0f766e;
+  color: #ffffff;
+  font-weight: 800;
+  text-align: center;
 }
 </style>

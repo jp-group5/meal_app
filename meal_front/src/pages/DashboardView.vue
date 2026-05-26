@@ -30,6 +30,7 @@ const localMeals = ref<Meal[]>(loadLocalMeals())
 const googleEvents = ref<CalendarDisplayEvent[]>([])
 const detailDate = ref<string | null>(null)
 const isAiDrawerOpen = ref(false)
+const isGraphPanelOpen = ref(true)
 const formMessage = ref('')
 const imageInput = ref<HTMLInputElement | null>(null)
 const aiImageLoading = ref(false)
@@ -329,9 +330,9 @@ function isValidNutritionValue(value: number | undefined) {
 </script>
 
 <template>
-  <div class="dashboard-layout">
-    <aside class="dashboard-sidebar">
-      <GraphPanel />
+  <div class="dashboard-layout" :class="{ 'is-graph-panel-collapsed': !isGraphPanelOpen }">
+    <aside class="dashboard-sidebar" aria-label="Nutrition graphs">
+      <GraphPanel :open="isGraphPanelOpen" @toggle="isGraphPanelOpen = !isGraphPanelOpen" />
     </aside>
 
     <section class="page dashboard-main">
@@ -519,16 +520,26 @@ function isValidNutritionValue(value: number | undefined) {
 
 <style scoped>
 .dashboard-layout {
+  --graph-panel-width: 280px;
   display: grid;
-  grid-template-columns: 280px minmax(0, 1fr);
+  grid-template-columns: minmax(0, var(--graph-panel-width)) minmax(0, 1fr);
   gap: 1.5rem;
   align-items: start;
+  transition: grid-template-columns 0.28s ease;
+}
+
+.dashboard-layout.is-graph-panel-collapsed {
+  --graph-panel-width: 2.75rem;
 }
 
 .dashboard-sidebar {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  position: sticky;
+  top: 1rem;
+  min-width: 0;
+  overflow: visible;
 }
 
 .dashboard-main {
@@ -537,7 +548,16 @@ function isValidNutritionValue(value: number | undefined) {
 
 @media (max-width: 860px) {
   .dashboard-layout {
+    --graph-panel-width: 100%;
     grid-template-columns: 1fr;
+  }
+
+  .dashboard-layout.is-graph-panel-collapsed {
+    --graph-panel-width: 100%;
+  }
+
+  .dashboard-sidebar {
+    position: static;
   }
 }
 </style>
