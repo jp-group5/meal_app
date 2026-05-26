@@ -394,6 +394,12 @@ func (h *NutritionHandler) GetRecommendation(c *gin.Context) {
 		return
 	}
 
+	mealType, ok := getMealTypeFromContext(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, codeAuthFailed, "Missing meal type in context.")
+		return
+	}
+
 	var req recommendationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, http.StatusBadRequest, codeNutritionInvalidParam, "date is required in YYYY-MM-DD format.")
@@ -406,7 +412,7 @@ func (h *NutritionHandler) GetRecommendation(c *gin.Context) {
 		return
 	}
 
-	promptData, err := h.buildRecommendationPrompt(userID, targetDate)
+	promptData, err := h.buildRecommendationPrompt(userID, mealType, targetDate)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, codeNutritionDBError, "Failed to build recommendation context.")
 		return
@@ -431,6 +437,12 @@ func (h *NutritionHandler) PreviewRecommendationPrompt(c *gin.Context) {
 		return
 	}
 
+	mealType, ok := getMealTypeFromContext(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, codeAuthFailed, "Missing meal type in context.")
+		return
+	}
+
 	dateRaw := strings.TrimSpace(c.Query("date"))
 	targetDate, err := parseDate(dateRaw)
 	if err != nil {
@@ -438,7 +450,7 @@ func (h *NutritionHandler) PreviewRecommendationPrompt(c *gin.Context) {
 		return
 	}
 
-	promptData, err := h.buildRecommendationPrompt(userID, targetDate)
+	promptData, err := h.buildRecommendationPrompt(userID, mealType, targetDate)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, codeNutritionDBError, "Failed to build recommendation context.")
 		return
@@ -447,9 +459,8 @@ func (h *NutritionHandler) PreviewRecommendationPrompt(c *gin.Context) {
 }
 
 type recommendationPromptData struct {
-	Metadata recommendationMetadata `json:"metadata"`
-	User     recommendationUser     `json:"user"`
-	Context  recommendationContext  `json:"context"`
+	User    recommendationUser    `json:"user"`
+	Context recommendationContext `json:"context"`
 }
 
 type recommendationMetadata struct {
@@ -459,8 +470,6 @@ type recommendationMetadata struct {
 }
 
 type recommendationUser struct {
-	UserID              uint      `json:"user_id"`
-	Username            string    `json:"username"`
 	HeightCM            *float64  `json:"height_cm,omitempty"`
 	WeightKG            *float64  `json:"weight_kg,omitempty"`
 	FitnessGoal         string    `json:"fitness_goal,omitempty"`
@@ -473,6 +482,7 @@ type recommendationUser struct {
 }
 
 type recommendationContext struct {
+	MealType              string                   `json:"meal_type"`
 	RecentMeals           []recommendationMeal     `json:"recent_meals"`
 	WeeklyActivities      []recommendationActivity `json:"weekly_activities"`
 	MealStats             mealStats                `json:"meal_stats"`
@@ -506,7 +516,7 @@ type mealStats struct {
 	RecentMealsWindowDays int `json:"recent_meals_window_days"`
 }
 
-func (h *NutritionHandler) buildRecommendationPrompt(userID uint, targetDate time.Time) (*recommendationPromptData, error) {
+func (h *NutritionHandler) buildRecommendationPrompt(userID uint, mealType string, targetDate time.Time) (*recommendationPromptData, error) {
 	var user models.User
 	if err := h.db.Select("id", "username", "email").First(&user, userID).Error; err != nil {
 		return nil, err
@@ -586,14 +596,7 @@ func (h *NutritionHandler) buildRecommendationPrompt(userID uint, targetDate tim
 	}
 
 	return &recommendationPromptData{
-		Metadata: recommendationMetadata{
-			GeneratedAt: time.Now().Format(time.RFC3339),
-			TargetDate:  targetDate.Format(dateLayout),
-			TimeZone:    "Asia/Tokyo",
-		},
 		User: recommendationUser{
-			UserID:              user.ID,
-			Username:            user.Username,
 			HeightCM:            profile.HeightCM,
 			WeightKG:            profile.WeightKG,
 			FitnessGoal:         profile.FitnessGoal,
@@ -605,6 +608,7 @@ func (h *NutritionHandler) buildRecommendationPrompt(userID uint, targetDate tim
 			ProfileLastUpdateAt: profile.UpdatedAt,
 		},
 		Context: recommendationContext{
+			MealType:         mealType,
 			RecentMeals:      promptMeals,
 			WeeklyActivities: promptActivities,
 			MealStats: mealStats{
@@ -996,6 +1000,15 @@ func getUserIDFromContext(c *gin.Context) (uint, bool) {
 	}
 	userID, ok := userIDVal.(uint)
 	return userID, ok
+}
+
+func getMealTypeFromContext(c *gin.Context) (string, bool) {
+	mealTypeVal, ok := c.Get("mealType")
+	if !ok {
+		return "", false
+	}
+	mealType, ok := mealTypeVal.(string)
+	return mealType, ok
 }
 
 func normalizeStringList(items []string) []string {

@@ -48,6 +48,7 @@ func (h *NutritionHandler) buildRecommendationWithAI(
 - monthly_food_budget を考慮し、現実的な献立にする
 - meal_history の days_ago は 0 が当日、1 が前日、2 が2日前を表す
 - 出力はJSONのみ
+- string の出力は英語
 
 出力形式:
 {
