@@ -58,6 +58,15 @@ func main() {
 	nutritionHandler := handlers.NewNutritionHandler(db)
 
 	r := gin.Default()
+	r.Use(middlewares.CORSMiddleware())
+
+	corsOrigins := strings.TrimSpace(os.Getenv("CORS_ALLOW_ORIGINS"))
+	if corsOrigins == "" {
+		log.Println("CORS_ALLOW_ORIGINS is empty; allowing all origins.")
+	} else {
+		log.Printf("CORS allowed origins: %s", corsOrigins)
+	}
+
 	apiV1 := r.Group("/api/v1")
 	{
 		apiV1.POST("/register", authHandler.Register)
