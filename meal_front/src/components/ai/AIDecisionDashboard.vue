@@ -18,7 +18,7 @@ const emit = defineEmits<{
       recommendationId: string
       name: string
       date: string
-      calories: number
+      calories: number | null
     },
   ]
 }>()
@@ -58,9 +58,19 @@ async function handleAccept(recommendation: AIRecommendation) {
   errorMessage.value = ''
   successMessage.value = ''
 
+  const suggestedDinner = recommendation.suggestedMeals.find((meal) => meal.type === 'dinner')
+  const fallbackMeal = recommendation.suggestedMeals[0]
+  const selectedMeal = suggestedDinner ?? fallbackMeal
+
+  if (!selectedMeal) {
+    errorMessage.value = 'This recommendation has no meal details to save.'
+    acceptingId.value = null
+    return
+  }
+
   const payload: CreateMealPayload = {
-    name: recommendation.name,
-    mealType: 'Dinner',
+    content: selectedMeal.content,
+    mealType: selectedMeal.type,
     date: props.selectedDate,
     calories: recommendation.calories,
     protein: recommendation.protein,
@@ -72,12 +82,12 @@ async function handleAccept(recommendation: AIRecommendation) {
 
   try {
     await acceptRecommendationAsMeal(payload)
-    successMessage.value = `${recommendation.name} was added as Dinner.`
+    successMessage.value = `${selectedMeal.content} was saved as ${selectedMeal.type}.`
     emit('accepted', {
       recommendationId: recommendation.id,
-      name: recommendation.name,
+      name: selectedMeal.content,
       date: props.selectedDate,
-      calories: recommendation.calories,
+      calories: recommendation.calories ?? null,
     })
   } catch (error) {
     errorMessage.value = 'Could not save this recommendation. Please try again.'

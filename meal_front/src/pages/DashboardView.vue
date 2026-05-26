@@ -266,7 +266,7 @@ function handleRecommendationAccepted(payload: {
   recommendationId: string
   name: string
   date: string
-  calories: number
+  calories: number | null
 }) {
   if (payload.date !== detailDate.value) {
     return
@@ -278,7 +278,7 @@ function handleRecommendationAccepted(payload: {
       date: payload.date,
       type: 'dinner',
       content: payload.name,
-      calories: payload.calories,
+      calories: payload.calories ?? undefined,
       protein: 32,
       fat: 18,
       carbs: 42,

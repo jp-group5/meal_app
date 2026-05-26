@@ -11,6 +11,11 @@ export const mockAIRecommendations: AIRecommendation[] = [
     carbs: 42,
     fat: 18,
     confidence: 92,
+    suggestedMeals: [
+      { type: 'breakfast', content: 'Greek yogurt with berries and granola' },
+      { type: 'lunch', content: 'Chicken quinoa bowl with mixed greens' },
+      { type: 'dinner', content: 'Grilled salmon power bowl' },
+    ],
   },
   {
     id: 'rec_002',
@@ -22,6 +27,11 @@ export const mockAIRecommendations: AIRecommendation[] = [
     carbs: 32,
     fat: 15,
     confidence: 88,
+    suggestedMeals: [
+      { type: 'breakfast', content: 'Egg white wrap with spinach' },
+      { type: 'lunch', content: 'Chicken quinoa salad' },
+      { type: 'dinner', content: 'Seared chicken and vegetable plate' },
+    ],
   },
   {
     id: 'rec_003',
@@ -33,6 +43,10 @@ export const mockAIRecommendations: AIRecommendation[] = [
     carbs: 56,
     fat: 14,
     confidence: 84,
+    suggestedMeals: [
+      { type: 'breakfast', content: 'Overnight oats and almond butter' },
+      { type: 'lunch', content: 'Tofu soba recovery plate' },
+      { type: 'dinner', content: 'Baked tofu with soba and vegetables' },
+    ],
   },
 ]
-

@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { computed } from 'vue'
 import type { AIRecommendation } from '../../types/aiRecommendation'
 
-defineProps<{
+const props = defineProps<{
   recommendation: AIRecommendation
   isAccepting?: boolean
 }>()
@@ -9,6 +10,12 @@ defineProps<{
 const emit = defineEmits<{
   accept: [recommendation: AIRecommendation]
 }>()
+
+const hasNutrition = computed(() =>
+  [props.recommendation.calories, props.recommendation.protein, props.recommendation.carbs, props.recommendation.fat].some(
+    (value) => typeof value === 'number',
+  ),
+)
 </script>
 
 <template>
@@ -18,7 +25,7 @@ const emit = defineEmits<{
         <h3 class="recommendation-name">
           {{ recommendation.name }}
         </h3>
-        <p class="recommendation-confidence">
+        <p v-if="typeof recommendation.confidence === 'number'" class="recommendation-confidence">
           {{ recommendation.confidence }}% match
         </p>
       </div>
@@ -33,7 +40,7 @@ const emit = defineEmits<{
       </button>
     </div>
 
-    <div class="recommendation-tags">
+    <div v-if="recommendation.tags?.length" class="recommendation-tags">
       <span v-for="tag in recommendation.tags" :key="tag" class="recommendation-tag">
         {{ tag }}
       </span>
@@ -43,22 +50,28 @@ const emit = defineEmits<{
       {{ recommendation.reason }}
     </p>
 
-    <dl class="recommendation-metrics">
+    <ul v-if="recommendation.suggestedMeals.length" class="recommendation-meals">
+      <li v-for="meal in recommendation.suggestedMeals" :key="`${meal.type}-${meal.content}`">
+        <strong>{{ meal.type }}</strong>: {{ meal.content }}
+      </li>
+    </ul>
+
+    <dl v-if="hasNutrition" class="recommendation-metrics">
       <div class="recommendation-metric">
         <dt>kcal</dt>
-        <dd>{{ recommendation.calories }}</dd>
+        <dd>{{ recommendation.calories ?? '-' }}</dd>
       </div>
       <div class="recommendation-metric">
         <dt>Protein</dt>
-        <dd>{{ recommendation.protein }}g</dd>
+        <dd>{{ recommendation.protein ?? '-' }}g</dd>
       </div>
       <div class="recommendation-metric">
         <dt>Carbs</dt>
-        <dd>{{ recommendation.carbs }}g</dd>
+        <dd>{{ recommendation.carbs ?? '-' }}g</dd>
       </div>
       <div class="recommendation-metric">
         <dt>Fat</dt>
-        <dd>{{ recommendation.fat }}g</dd>
+        <dd>{{ recommendation.fat ?? '-' }}g</dd>
       </div>
     </dl>
   </article>
@@ -122,6 +135,19 @@ const emit = defineEmits<{
   color: #4a5968;
   line-height: 1.5;
   font-size: 0.92rem;
+}
+
+.recommendation-meals {
+  margin: 0.8rem 0 0;
+  padding-left: 1rem;
+  display: grid;
+  gap: 0.3rem;
+}
+
+.recommendation-meals li {
+  color: #344457;
+  font-size: 0.86rem;
+  line-height: 1.4;
 }
 
 .recommendation-metrics {
