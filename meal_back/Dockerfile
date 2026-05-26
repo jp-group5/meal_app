@@ -16,7 +16,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=build /app/server /app/server
+COPY --from=build /app/server /usr/local/bin/server
 
 EXPOSE 8080
-CMD ["/app/server"]
+CMD ["/usr/local/bin/server"]
