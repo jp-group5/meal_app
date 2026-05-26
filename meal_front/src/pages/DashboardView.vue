@@ -266,6 +266,7 @@ function handleRecommendationAccepted(payload: {
   recommendationId: string
   name: string
   date: string
+  mealType: MealType
   calories: number | null
 }) {
   if (payload.date !== detailDate.value) {
@@ -276,7 +277,7 @@ function handleRecommendationAccepted(payload: {
     {
       id: `ai-${payload.recommendationId}-${Date.now()}`,
       date: payload.date,
-      type: 'dinner',
+      type: payload.mealType,
       content: payload.name,
       calories: payload.calories ?? undefined,
       protein: 32,
@@ -505,7 +506,11 @@ function isValidNutritionValue(value: number | undefined) {
           <button type="button" class="button-outline" @click="isAiDrawerOpen = false">Close</button>
         </div>
 
-        <AIDecisionDashboard :selected-date="detailDate" @accepted="handleRecommendationAccepted" />
+        <AIDecisionDashboard
+          :selected-date="detailDate"
+          :meal-type="mealForm.type"
+          @accepted="handleRecommendationAccepted"
+        />
       </aside>
     </div>
     </section>

@@ -6,11 +6,18 @@ import {
   acceptRecommendationAsMeal,
   fetchAIRecommendations,
 } from '../../services/aiRecommendationApi'
+import type { MealType } from '../../types'
 import type { AIRecommendation, CreateMealPayload } from '../../types/aiRecommendation'
 
-const props = defineProps<{
-  selectedDate: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    selectedDate: string
+    mealType?: MealType
+  }>(),
+  {
+    mealType: 'dinner',
+  },
+)
 
 const emit = defineEmits<{
   accepted: [
@@ -18,6 +25,7 @@ const emit = defineEmits<{
       recommendationId: string
       name: string
       date: string
+      mealType: MealType
       calories: number | null
     },
   ]
@@ -30,9 +38,12 @@ const acceptingId = ref<string | null>(null)
 const successMessage = ref('')
 
 const hasRecommendations = computed(() => recommendations.value.length > 0)
+const selectedMealLabel = computed(() => toTitleCase(props.mealType))
+const acceptLabel = computed(() => `Accept as ${selectedMealLabel.value}`)
+const heading = computed(() => `${selectedMealLabel.value} recommendations`)
 
 watch(
-  () => props.selectedDate,
+  () => [props.selectedDate, props.mealType],
   () => {
     void loadRecommendations()
   },
@@ -58,9 +69,9 @@ async function handleAccept(recommendation: AIRecommendation) {
   errorMessage.value = ''
   successMessage.value = ''
 
-  const suggestedDinner = recommendation.suggestedMeals.find((meal) => meal.type === 'dinner')
+  const suggestedSelectedMeal = recommendation.suggestedMeals.find((meal) => meal.type === props.mealType)
   const fallbackMeal = recommendation.suggestedMeals[0]
-  const selectedMeal = suggestedDinner ?? fallbackMeal
+  const selectedMeal = suggestedSelectedMeal ?? fallbackMeal
 
   if (!selectedMeal) {
     errorMessage.value = 'This recommendation has no meal details to save.'
@@ -70,7 +81,7 @@ async function handleAccept(recommendation: AIRecommendation) {
 
   const payload: CreateMealPayload = {
     content: selectedMeal.content,
-    mealType: selectedMeal.type,
+    mealType: props.mealType,
     date: props.selectedDate,
     calories: recommendation.calories,
     protein: recommendation.protein,
@@ -82,11 +93,12 @@ async function handleAccept(recommendation: AIRecommendation) {
 
   try {
     await acceptRecommendationAsMeal(payload)
-    successMessage.value = `${selectedMeal.content} was saved as ${selectedMeal.type}.`
+    successMessage.value = `${selectedMeal.content} was saved as ${props.mealType}.`
     emit('accepted', {
       recommendationId: recommendation.id,
       name: selectedMeal.content,
       date: props.selectedDate,
+      mealType: props.mealType,
       calories: recommendation.calories ?? null,
     })
   } catch (error) {
@@ -95,6 +107,10 @@ async function handleAccept(recommendation: AIRecommendation) {
     acceptingId.value = null
   }
 }
+
+function toTitleCase(value: string) {
+  return value.charAt(0).toUpperCase() + value.slice(1)
+}
 </script>
 
 <template>
@@ -102,7 +118,7 @@ async function handleAccept(recommendation: AIRecommendation) {
       <header class="ai-dashboard-header">
         <div>
           <p class="eyebrow">AI Decision Dashboard</p>
-          <h3>Dinner recommendations</h3>
+          <h3>{{ heading }}</h3>
         </div>
 
         <button
@@ -132,6 +148,7 @@ async function handleAccept(recommendation: AIRecommendation) {
               :key="recommendation.id"
               :recommendation="recommendation"
               :is-accepting="acceptingId === recommendation.id"
+              :accept-label="acceptLabel"
               @accept="handleAccept"
             />
         </TransitionGroup>
