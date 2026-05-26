@@ -586,18 +586,25 @@ function isValidNutritionValue(value: number | undefined) {
 .meal-form-nutrients {
   display: grid;
   gap: 0.6rem;
+  min-width: 0;
 }
 
 .meal-form-main {
-  grid-template-columns: minmax(120px, 0.36fr) minmax(220px, 1fr);
+  grid-template-columns: minmax(120px, 0.36fr) minmax(0, 1fr);
 }
 
 .meal-form-nutrients {
-  grid-template-columns: repeat(4, minmax(96px, 1fr)) minmax(112px, auto);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 112px), 1fr));
+}
+
+.meal-form input,
+.meal-form select,
+.meal-form button {
+  width: 100%;
+  min-width: 0;
 }
 
 .meal-form-nutrients button {
-  min-width: 112px;
   white-space: nowrap;
 }
 
