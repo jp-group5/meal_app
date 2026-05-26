@@ -1,13 +1,12 @@
-import { mockWeeklyNutrition } from '../mocks/nutrients'
-import type { WeeklyNutritionResponse } from '../types/nutrients'
+import { getWeeklyNutrition } from '@/api/meal'
+import type { WeeklyNutritionResponse } from '@/types/nutrients'
 
 export async function fetchWeeklyNutrition(startDate: string, endDate: string): Promise<WeeklyNutritionResponse> {
-  console.info(`Mock fetch weekly nutrition from ${startDate} to ${endDate}`)
+  const response = await getWeeklyNutrition(startDate, endDate)
 
-  await wait(500)
-  return mockWeeklyNutrition
-}
+  if (!response.data) {
+    throw new Error('Weekly nutrition data is unavailable.')
+  }
 
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
+  return response.data
 }

@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
@@ -70,6 +71,26 @@ type activityRequest struct {
 
 type recommendationRequest struct {
 	Date string `json:"date" binding:"required"`
+}
+
+type weeklyNutritionSummary struct {
+	AverageCalories float64 `json:"average_calories"`
+	AverageProtein  float64 `json:"average_protein"`
+	AverageFat      float64 `json:"average_fat"`
+	AverageCarbs    float64 `json:"average_carbs"`
+}
+
+type dailyNutritionTotal struct {
+	Date          string  `json:"date"`
+	TotalCalories int     `json:"total_calories"`
+	TotalProtein  float64 `json:"total_protein"`
+	TotalFat      float64 `json:"total_fat"`
+	TotalCarbs    float64 `json:"total_carbs"`
+}
+
+type weeklyNutritionPayload struct {
+	Summary   weeklyNutritionSummary `json:"summary"`
+	DailyData []dailyNutritionTotal  `json:"daily_data"`
 }
 
 func (h *NutritionHandler) UpsertPreferences(c *gin.Context) {
@@ -145,6 +166,48 @@ func (h *NutritionHandler) GetMealsByDate(c *gin.Context) {
 		items = append(items, toMealPayload(record))
 	}
 	response.Success(c, http.StatusOK, items)
+}
+
+func (h *NutritionHandler) GetWeeklyNutrition(c *gin.Context) {
+	userID, ok := getUserIDFromContext(c)
+	if !ok {
+		response.Error(c, http.StatusUnauthorized, codeAuthFailed, "Missing user identity in context.")
+		return
+	}
+
+	startDate, err := parseDate(firstNotEmpty(c.Query("startDate"), c.Query("start_date")))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, codeNutritionInvalidParam, "startDate is required in YYYY-MM-DD format.")
+		return
+	}
+
+	endDate, err := parseDate(firstNotEmpty(c.Query("endDate"), c.Query("end_date")))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, codeNutritionInvalidParam, "endDate is required in YYYY-MM-DD format.")
+		return
+	}
+
+	if endDate.Before(startDate) {
+		response.Error(c, http.StatusBadRequest, codeNutritionInvalidParam, "endDate must be on or after startDate.")
+		return
+	}
+
+	if int(endDate.Sub(startDate).Hours()/24)+1 > 31 {
+		response.Error(c, http.StatusBadRequest, codeNutritionInvalidParam, "Date range cannot exceed 31 days.")
+		return
+	}
+
+	var records []models.MealRecord
+	if err := h.db.
+		Where("user_id = ? AND date >= ? AND date <= ?", userID, startDate.Format(dateLayout), endDate.Format(dateLayout)).
+		Order("date ASC, created_at ASC").
+		Find(&records).Error; err != nil {
+		response.Error(c, http.StatusInternalServerError, codeNutritionDBError, "Failed to query nutrition records.")
+		return
+	}
+
+	dailyData := buildWeeklyNutritionPayload(startDate, endDate, records)
+	response.Success(c, http.StatusOK, dailyData)
 }
 
 func (h *NutritionHandler) CreateMeal(c *gin.Context) {
@@ -724,6 +787,73 @@ func toActivityPayload(record models.ActivityRecord) gin.H {
 		"endTime":   record.EndTime,
 		"intensity": normalizeIntensity(record.Intensity),
 	}
+}
+
+func buildWeeklyNutritionPayload(startDate time.Time, endDate time.Time, records []models.MealRecord) weeklyNutritionPayload {
+	dailyIndexByDate := map[string]int{}
+	dailyData := []dailyNutritionTotal{}
+
+	for day := startDate; !day.After(endDate); day = day.AddDate(0, 0, 1) {
+		key := day.Format(dateLayout)
+		dailyData = append(dailyData, dailyNutritionTotal{Date: key})
+		dailyIndexByDate[key] = len(dailyData) - 1
+	}
+
+	for _, record := range records {
+		key := record.Date.Format(dateLayout)
+		index, ok := dailyIndexByDate[key]
+		if !ok {
+			continue
+		}
+
+		if record.Calories != nil {
+			dailyData[index].TotalCalories += *record.Calories
+		}
+		if record.Protein != nil {
+			dailyData[index].TotalProtein += *record.Protein
+		}
+		if record.Fat != nil {
+			dailyData[index].TotalFat += *record.Fat
+		}
+		if record.Carbs != nil {
+			dailyData[index].TotalCarbs += *record.Carbs
+		}
+	}
+
+	var totalCalories int
+	var totalProtein float64
+	var totalFat float64
+	var totalCarbs float64
+
+	for index := range dailyData {
+		dailyData[index].TotalProtein = roundToOneDecimal(dailyData[index].TotalProtein)
+		dailyData[index].TotalFat = roundToOneDecimal(dailyData[index].TotalFat)
+		dailyData[index].TotalCarbs = roundToOneDecimal(dailyData[index].TotalCarbs)
+
+		totalCalories += dailyData[index].TotalCalories
+		totalProtein += dailyData[index].TotalProtein
+		totalFat += dailyData[index].TotalFat
+		totalCarbs += dailyData[index].TotalCarbs
+	}
+
+	dayCount := float64(len(dailyData))
+	if dayCount == 0 {
+		dayCount = 1
+	}
+
+	return weeklyNutritionPayload{
+		Summary: weeklyNutritionSummary{
+			AverageCalories: roundToOneDecimal(float64(totalCalories) / dayCount),
+			AverageProtein:  roundToOneDecimal(totalProtein / dayCount),
+			AverageFat:      roundToOneDecimal(totalFat / dayCount),
+			AverageCarbs:    roundToOneDecimal(totalCarbs / dayCount),
+		},
+		DailyData: dailyData,
+	}
+}
+
+func roundToOneDecimal(value float64) float64 {
+	return math.Round(value*10) / 10
 }
 
 func buildMealRecord(userID uint, req mealRequest) (models.MealRecord, error) {

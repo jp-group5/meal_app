@@ -1,0 +1,42 @@
+2026/05/26 07:17:19 Logging to log/backend.log
+[GIN-debug] [WARNING] Creating an Engine instance with the Logger and Recovery middleware already attached.
+
+[GIN-debug] [WARNING] Running in "debug" mode. Switch to "release" mode in production.
+ - using env:	export GIN_MODE=release
+ - using code:	gin.SetMode(gin.ReleaseMode)
+
+[GIN-debug] POST   /api/v1/register          --> meal_back/handlers.(*AuthHandler).Register-fm (3 handlers)
+[GIN-debug] POST   /api/v1/login             --> meal_back/handlers.(*AuthHandler).Login-fm (3 handlers)
+[GIN-debug] POST   /api/v1/refresh           --> meal_back/handlers.(*AuthHandler).RefreshToken-fm (3 handlers)
+[GIN-debug] GET    /api/v1/private/me        --> meal_back/handlers.(*AuthHandler).Me-fm (4 handlers)
+[GIN-debug] POST   /api/v1/private/logout    --> meal_back/handlers.(*AuthHandler).Logout-fm (4 handlers)
+[GIN-debug] PUT    /api/v1/private/me/profile --> meal_back/handlers.(*AuthHandler).UpsertProfile-fm (4 handlers)
+[GIN-debug] POST   /api/v1/private/me/profile --> meal_back/handlers.(*AuthHandler).UpsertProfile-fm (4 handlers)
+[GIN-debug] PUT    /api/v1/users/me/profile  --> meal_back/handlers.(*AuthHandler).UpsertProfile-fm (4 handlers)
+[GIN-debug] POST   /api/v1/users/me/profile  --> meal_back/handlers.(*AuthHandler).UpsertProfile-fm (4 handlers)
+[GIN-debug] PUT    /api/v1/users/me/preferences --> meal_back/handlers.(*NutritionHandler).UpsertPreferences-fm (4 handlers)
+[GIN-debug] PUT    /api/v1/private/me/preferences --> meal_back/handlers.(*NutritionHandler).UpsertPreferences-fm (4 handlers)
+[GIN-debug] GET    /api/v1/meals             --> meal_back/handlers.(*NutritionHandler).GetMealsByDate-fm (4 handlers)
+[GIN-debug] POST   /api/v1/meals             --> meal_back/handlers.(*NutritionHandler).CreateMeal-fm (4 handlers)
+[GIN-debug] PUT    /api/v1/meals/:id         --> meal_back/handlers.(*NutritionHandler).UpdateMeal-fm (4 handlers)
+[GIN-debug] DELETE /api/v1/meals/:id         --> meal_back/handlers.(*NutritionHandler).DeleteMeal-fm (4 handlers)
+[GIN-debug] GET    /api/v1/activities        --> meal_back/handlers.(*NutritionHandler).GetActivitiesByDate-fm (4 handlers)
+[GIN-debug] POST   /api/v1/activities        --> meal_back/handlers.(*NutritionHandler).CreateActivity-fm (4 handlers)
+[GIN-debug] PUT    /api/v1/activities/:id    --> meal_back/handlers.(*NutritionHandler).UpdateActivity-fm (4 handlers)
+[GIN-debug] DELETE /api/v1/activities/:id    --> meal_back/handlers.(*NutritionHandler).DeleteActivity-fm (4 handlers)
+[GIN-debug] POST   /api/v1/recommendations   --> meal_back/handlers.(*NutritionHandler).GetRecommendation-fm (4 handlers)
+[GIN-debug] GET    /api/v1/recommendations/prompt --> meal_back/handlers.(*NutritionHandler).PreviewRecommendationPrompt-fm (4 handlers)
+[GIN-debug] POST   /api/v1/meals/analyze-image --> meal_back/handlers.(*NutritionHandler).AnalyzeMealImage-fm (4 handlers)
+[GIN-debug] [WARNING] You trusted all proxies, this is NOT safe. We recommend you to set a value.
+Please check https://github.com/gin-gonic/gin/blob/master/docs/doc.md#dont-trust-all-proxies for details.
+[GIN-debug] Listening and serving HTTP on :8080
+[GIN] 2026/05/26 - 07:17:26 | 401 | 443.657µs |      172.19.0.1 | POST     "/api/v1/recommendations"
+[GIN] 2026/05/26 - 07:17:46 | 401 | 261.177µs |      172.19.0.1 | POST     "/api/v1/recommendations"
+[GIN] 2026/05/26 - 07:20:10 | 401 | 153.907µs |      172.19.0.1 | POST     "/api/v1/recommendations"
+[GIN] 2026/05/26 - 07:21:24 | 401 | 180.729µs |      172.19.0.1 | POST     "/api/v1/private/logout"
+[GIN] 2026/05/26 - 07:21:26 | 200 |  68.12ms |      172.19.0.1 | POST     "/api/v1/login"
+[GIN] 2026/05/26 - 07:21:27 | 200 |   7.63ms |      172.19.0.1 | GET      "/api/v1/private/me"
+2026/05/26 07:21:41 [OpenAI usage] input=575 output=532 total=1107
+2026/05/26 07:21:41 [AI recommendation] {"date":"2026-05-29","choices":[{"title":"体重減量に最適！低カロリーで栄養満点な1日メニュー","reason":"本日の体重減量目標に合わせて、低カロリーかつ栄養バランスの良い献立を提案します。予算内で手軽に利用できる材料を中心にしました。","suggestedMeals":[{"type":"breakfast","content":"無糖ヨーグルトにベリーとナッツをトッピングしたヘルシーブレックファースト"},{"type":"lunch","content":"蒸し鶏と野菜サラダ（オリーブオイルドレッシング）＋全粒粉パン一切れ"},{"type":"dinner","content":"豆腐と野菜の味噌汁＋玄米ご飯＋ほうれん草のお浸し"}]},{"title":"ヨガに適したバランス献立","reason":"ヨガのトレーニングのため、適度なタンパク質とビタミン、ミネラルを摂取できる献立です。低脂質で胃に優しいメニューにしています。","suggestedMeals":[{"type":"breakfast","content":"オートミールにバナナとシナモンを加えた朝食"},{"type":"lunch","content":"野菜たっぷりの豆腐チャンプルー＋雑穀米"},{"type":"dinner","content":"ささみのグリルと蒸し野菜＋味噌汁"}]},{"title":"予算内で続けやすいシンプルな減量献立","reason":"経済的に継続しやすい献立として、身近な食材と簡単調理で済むメニューを中心にしました。体重管理を支援する低カロリー設計です。","suggestedMeals":[{"type":"breakfast","content":"トースト（全粒粉）とゆで卵＋トマトスライスの朝食"},{"type":"lunch","content":"キャベツのサラダ＋鮭の塩焼き＋麦ごはん"},{"type":"dinner","content":"野菜スープ＋鶏むね肉のソテー＋ブロッコリーの胡麻和え"}]}]}
+[GIN] 2026/05/26 - 07:21:41 | 200 |    7.86s |      172.19.0.1 | POST     "/api/v1/recommendations"
+[GIN] 2026/05/26 - 07:21:53 | 201 |  31.88ms |      172.19.0.1 | POST     "/api/v1/meals"

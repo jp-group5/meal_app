@@ -63,6 +63,7 @@ func main() {
 		authed.PUT("/users/me/preferences", nutritionHandler.UpsertPreferences)
 		authed.PUT("/private/me/preferences", nutritionHandler.UpsertPreferences)
 
+		authed.GET("/meals/nutrition", nutritionHandler.GetWeeklyNutrition)
 		authed.GET("/meals", nutritionHandler.GetMealsByDate)
 		authed.POST("/meals", nutritionHandler.CreateMeal)
 		authed.PUT("/meals/:id", nutritionHandler.UpdateMeal)

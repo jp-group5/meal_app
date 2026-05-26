@@ -5,7 +5,9 @@ import { computed, reactive, ref } from 'vue'
 import AIDecisionDashboard from '@/components/ai/AIDecisionDashboard.vue'
 import GoogleCalendar from '@/components/calendar/GoogleCalendar.vue'
 import GraphPanel from '@/components/graph/GraphPanel.vue'
+import { createMeal, deleteMeal } from '@/api/meal'
 import { useDateStore } from '@/stores/date'
+import { useUserStore } from '@/stores/user'
 import type { Meal, MealType } from '@/types'
 
 interface CalendarDisplayEvent {
@@ -24,6 +26,7 @@ const LOCAL_MEALS_STORAGE_KEY = 'meal-app-local-meals'
 const MOCK_MEAL_DATE = '2026-05-31'
 
 const dateStore = useDateStore()
+const userStore = useUserStore()
 const { selectedDate, selectedMonth } = storeToRefs(dateStore)
 
 const localMeals = ref<Meal[]>(loadLocalMeals())
@@ -31,6 +34,7 @@ const googleEvents = ref<CalendarDisplayEvent[]>([])
 const detailDate = ref<string | null>(null)
 const isAiDrawerOpen = ref(false)
 const isGraphPanelOpen = ref(true)
+const graphRefreshKey = ref(0)
 const formMessage = ref('')
 const imageInput = ref<HTMLInputElement | null>(null)
 const aiImageLoading = ref(false)
@@ -112,7 +116,7 @@ function handleCalendarEventsLoaded(events: CalendarDisplayEvent[]) {
   googleEvents.value = events
 }
 
-function addMealRecord() {
+async function addMealRecord() {
   formMessage.value = ''
 
   if (!detailDate.value) {
@@ -140,24 +144,44 @@ function addMealRecord() {
     return
   }
 
-  localMeals.value = [
-    {
-      id: `local-${Date.now()}`,
-      date: detailDate.value,
-      type: mealForm.type,
-      content,
-      calories,
-      protein,
-      fat,
-      carbs,
-    },
-    ...localMeals.value,
-  ]
+  const draftMeal: Omit<Meal, 'id'> = {
+    date: detailDate.value,
+    type: mealForm.type,
+    content,
+    calories,
+    protein,
+    fat,
+    carbs,
+  }
+
+  let savedMeal: Meal = {
+    id: `local-${Date.now()}`,
+    ...draftMeal,
+  }
+
+  if (userStore.token) {
+    try {
+      const response = await createMeal(draftMeal)
+
+      if (response.data) {
+        savedMeal = response.data
+      }
+
+      refreshNutritionGraph()
+      formMessage.value = 'Meal record saved to the database.'
+    } catch (error) {
+      console.error('Could not save meal to backend. Saving locally instead.', error)
+      formMessage.value = 'Meal record saved locally. The graph updates after it is saved to the database.'
+    }
+  } else {
+    formMessage.value = 'Meal record saved locally. Log in to include it in the nutrition graph.'
+  }
+
+  localMeals.value = [savedMeal, ...localMeals.value]
 
   saveLocalMeals()
   resetMealForm()
   aiImageResult.value = null
-  formMessage.value = 'Meal record saved locally.'
 }
 
 function openImageUpload() {
@@ -245,7 +269,7 @@ function resetMealForm() {
   mealForm.carbs = ''
 }
 
-function deleteMealRecord(mealId: string) {
+async function deleteMealRecord(mealId: string) {
   const meal = localMeals.value.find((item) => item.id === mealId)
 
   if (!meal || !canDeleteMeal(meal)) {
@@ -256,6 +280,17 @@ function deleteMealRecord(mealId: string) {
 
   if (!shouldDelete) {
     return
+  }
+
+  if (userStore.token && isBackendMealId(meal.id)) {
+    try {
+      await deleteMeal(meal.id)
+      refreshNutritionGraph()
+    } catch (error) {
+      console.error('Could not delete meal from backend:', error)
+      formMessage.value = 'Could not delete this meal from the database. Please try again.'
+      return
+    }
   }
 
   localMeals.value = localMeals.value.filter((item) => item.id !== mealId)
@@ -288,6 +323,7 @@ function handleRecommendationAccepted(payload: {
   ]
 
   saveLocalMeals()
+  refreshNutritionGraph()
 }
 
 function createFallbackMeals(date: string): Meal[] {
@@ -320,18 +356,31 @@ function toTitleCase(value: string) {
 }
 
 function canDeleteMeal(meal: Meal) {
-  return meal.id.startsWith('local-') || meal.id.startsWith('ai-')
+  return meal.id.startsWith('local-') || meal.id.startsWith('ai-') || isBackendMealId(meal.id)
 }
 
 function isValidNutritionValue(value: number | undefined) {
   return value === undefined || (Number.isFinite(value) && value >= 0)
+}
+
+function isBackendMealId(id: string) {
+  return /^\d+$/.test(id)
+}
+
+function refreshNutritionGraph() {
+  graphRefreshKey.value += 1
 }
 </script>
 
 <template>
   <div class="dashboard-layout" :class="{ 'is-graph-panel-collapsed': !isGraphPanelOpen }">
     <aside class="dashboard-sidebar" aria-label="Nutrition graphs">
-      <GraphPanel :open="isGraphPanelOpen" @toggle="isGraphPanelOpen = !isGraphPanelOpen" />
+      <GraphPanel
+        :open="isGraphPanelOpen"
+        :refresh-key="graphRefreshKey"
+        :selected-date="selectedDate"
+        @toggle="isGraphPanelOpen = !isGraphPanelOpen"
+      />
     </aside>
 
     <section class="page dashboard-main">

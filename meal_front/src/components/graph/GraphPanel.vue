@@ -21,6 +21,10 @@
       </div>
 
       <div v-else-if="nutritionData" class="charts-container">
+        <p v-if="!hasNutritionValues" class="empty-nutrition-message">
+          この期間の栄養データはまだありません。カロリーや栄養素を入力して食事を保存すると表示されます。
+        </p>
+
         <!-- グラフ群 -->
         <div class="charts-grid">
           <div class="chart-box">
@@ -62,7 +66,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { fetchWeeklyNutrition } from '@/services/nutritionApi';
 import type { WeeklyNutritionResponse } from '@/types/nutrients';
 
@@ -94,9 +98,13 @@ ChartJS.register(
 const props = withDefaults(
   defineProps<{
     open?: boolean
+    refreshKey?: number
+    selectedDate?: string
   }>(),
   {
     open: true,
+    refreshKey: 0,
+    selectedDate: '',
   },
 );
 
@@ -108,23 +116,41 @@ const loading = ref(true);
 const error = ref<string | null>(null);
 const nutritionData = ref<WeeklyNutritionResponse | null>(null);
 const toggleLabel = computed(() => (props.open ? '栄養グラフを閉じる' : '栄養グラフを開く'));
+const hasNutritionValues = computed(() =>
+  Boolean(
+    nutritionData.value?.daily_data.some(
+      (day) =>
+        day.total_calories > 0 ||
+        day.total_protein > 0 ||
+        day.total_fat > 0 ||
+        day.total_carbs > 0,
+    ),
+  ),
+);
 
-// コンポーネントマウント時にデータ取得
-onMounted(async () => {
+watch(
+  () => [props.selectedDate, props.refreshKey],
+  () => {
+    void loadWeeklyNutrition();
+  },
+  { immediate: true },
+);
+
+async function loadWeeklyNutrition() {
   try {
     loading.value = true;
     error.value = null;
-    
-    // APIからモックデータを取得 (現在は固定の日付を指定)
-    const data = await fetchWeeklyNutrition('2026-05-06', '2026-05-12');
+
+    const { startDate, endDate } = getWeeklyRange(props.selectedDate);
+    const data = await fetchWeeklyNutrition(startDate, endDate);
     nutritionData.value = data;
   } catch (err) {
-    error.value = 'データの取得に失敗しました';
+    error.value = getNutritionErrorMessage(err);
     console.error(err);
   } finally {
     loading.value = false;
   }
-});
+}
 
 // グラフの共通オプション
 const chartOptions = {
@@ -188,6 +214,42 @@ const carbsChartData = computed(() => ({
     }
   ]
 }));
+
+function getWeeklyRange(selectedDate: string) {
+  const end = parseDateKey(selectedDate) ?? new Date();
+  const start = new Date(end);
+  start.setDate(end.getDate() - 6);
+
+  return {
+    startDate: toDateKey(start),
+    endDate: toDateKey(end),
+  };
+}
+
+function parseDateKey(value: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return null;
+  }
+
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function toDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function getNutritionErrorMessage(error: unknown) {
+  if (error instanceof Error && (error as Error & { bizCode?: number }).bizCode === 10005) {
+    return 'ログインすると1週間の栄養グラフを表示できます';
+  }
+
+  return 'データの取得に失敗しました';
+}
 </script>
 
 <style scoped>
@@ -276,6 +338,17 @@ h2 {
 }
 .error {
   color: #d32f2f;
+}
+
+.empty-nutrition-message {
+  margin: 0 0 1rem;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #475569;
+  padding: 0.7rem 0.8rem;
+  font-size: 0.86rem;
+  line-height: 1.5;
 }
 
 .summary-cards {
