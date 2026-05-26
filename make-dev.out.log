@@ -1,83 +1,9 @@
-C:/Users/86133/scoop/apps/make/current/bin/make.exe -C meal_back up
-make[1]: Entering directory 'C:/Users/86133/Desktop/mywork/meal_app/meal_back'
-./scripts/setup_env.sh
-[setup] setting up meal_back with Docker
-[setup] .env.docker already exists
-[setup] validating compose config
-[setup] setup complete
-[setup] run the backend with: make run-env
-docker compose --env-file .env.docker up --build -d
-#1 [internal] load local bake definitions
-#1 reading from stdin 553B 0.0s done
-#1 DONE 0.0s
-
-#2 [internal] load build definition from Dockerfile
-#2 transferring dockerfile: 214B done
-#2 DONE 0.0s
-
-#3 resolve image config for docker-image://docker.io/docker/dockerfile:1.7
-#3 DONE 1.1s
-
-#4 docker-image://docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
-#4 resolve docker.io/docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e 0.0s done
-#4 CACHED
-
-#5 [internal] load metadata for docker.io/library/golang:1.26.3-bookworm
-#5 DONE 0.8s
-
-#6 [internal] load .dockerignore
-#6 transferring context: 140B done
-#6 DONE 0.0s
-
-#7 [internal] load build context
-#7 transferring context: 1.39kB done
-#7 DONE 0.0s
-
-#8 [1/5] FROM docker.io/library/golang:1.26.3-bookworm@sha256:252599aeb51ad60b83e4d8821802068127c528c707cb7dd7afd93be057c6011c
-#8 resolve docker.io/library/golang:1.26.3-bookworm@sha256:252599aeb51ad60b83e4d8821802068127c528c707cb7dd7afd93be057c6011c 0.0s done
-#8 DONE 0.0s
-
-#9 [3/5] COPY go.mod go.sum ./
-#9 CACHED
-
-#10 [2/5] WORKDIR /app
-#10 CACHED
-
-#11 [4/5] RUN go mod download
-#11 CACHED
-
-#12 [5/5] COPY . .
-#12 CACHED
-
-#13 exporting to image
-#13 exporting layers done
-#13 exporting manifest sha256:d2744776aba8f3d4ffe0eee94c9f2f668b0c5517d73e9b7c3c86994170e35b4f done
-#13 exporting config sha256:3f17f4e25a37b31332c3aa52172fd28026d4cebb7ecb056f23f7bb14b28e2c4c done
-#13 exporting attestation manifest sha256:5dc3171f9bb7b9fc1d0a335ef68cb13436efa0c7652a1bc2c2a89fb6f6fc4926 0.0s done
-#13 exporting manifest list sha256:e1d21c14ae63f40777de9f71a796a193ac9d9685e3534e6b12dbb434e448afed
-#13 exporting manifest list sha256:e1d21c14ae63f40777de9f71a796a193ac9d9685e3534e6b12dbb434e448afed 0.0s done
-#13 naming to docker.io/library/meal_back-api:latest done
-#13 unpacking to docker.io/library/meal_back-api:latest done
-#13 DONE 0.1s
-
-#14 resolving provenance for metadata file
-#14 DONE 0.0s
-make[1]: Leaving directory 'C:/Users/86133/Desktop/mywork/meal_app/meal_back'
-cd meal_front && npm run dev
 
 > meal-app@0.1.0 dev
-> vite
+> vite --host 127.0.0.1
 
+Port 5173 is in use, trying another one...
 
-  [32m[1mVITE[22m v6.4.2[39m  [2mready in [0m[1m567[22m[2m[0m ms[22m
+  [32m[1mVITE[22m v6.4.2[39m  [2mready in [0m[1m489[22m[2m[0m ms[22m
 
-  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5173[22m/[39m
-  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.10.1:[1m5173[22m/[39m
-  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.25.1:[1m5173[22m/[39m
-  [32m➜[39m  [1mNetwork[22m: [36mhttp://10.231.234.75:[1m5173[22m/[39m
-  [32m➜[39m  [1mNetwork[22m: [36mhttp://172.26.144.1:[1m5173[22m/[39m
-[2m17:20:36[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ProfileView.vue, /src/pages/ProfileView.vue?vue&type=style&index=0&scoped=9006468e&lang.css[22m
-[2m17:20:46[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/OnboardingView.vue[22m
-[2m17:27:01[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/App.vue[22m
-[2m17:27:16[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles/main.css[22m
-[2m17:27:35[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/ProfileView.vue, /src/pages/ProfileView.vue?vue&type=style&index=0&scoped=9006468e&lang.css[22m
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5174[22m/[39m
