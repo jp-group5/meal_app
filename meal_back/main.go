@@ -25,6 +25,10 @@ func main() {
 
 	dsn := os.Getenv("DB_DSN")
 	jwtSecret := os.Getenv("JWT_SECRET")
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
+		port = "8080"
+	}
 
 	if dsn == "" {
 		log.Fatal("Missing environment variable DB_DSN")
@@ -88,7 +92,7 @@ func main() {
 		authed.POST("/meals/analyze-image", nutritionHandler.AnalyzeMealImage)
 	}
 
-	if err := r.Run(":8080"); err != nil {
+	if err := r.Run(":" + port); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
 }
