@@ -1,8 +1,11 @@
 package main
 
 import (
+	"io"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"meal_back/handlers"
 	"meal_back/middlewares"
@@ -15,9 +18,9 @@ import (
 )
 
 func main() {
-	//read .env to get API key
-	if err := godotenv.Load(); err != nil {
-		log.Println(".env file not found, using system environment variables")
+	logFile := configureLogging()
+	if logFile != nil {
+		defer logFile.Close()
 	}
 
 	dsn := os.Getenv("DB_DSN")
@@ -88,4 +91,30 @@ func main() {
 	if err := r.Run(":8080"); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
+}
+
+func configureLogging() *os.File {
+	logDir := strings.TrimSpace(os.Getenv("LOG_DIR"))
+	if logDir == "" {
+		logDir = "log"
+	}
+
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		log.Printf("Failed to create log directory %s: %v", logDir, err)
+		return nil
+	}
+
+	logPath := filepath.Join(logDir, "backend.log")
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		log.Printf("Failed to open log file %s: %v", logPath, err)
+		return nil
+	}
+
+	multiWriter := io.MultiWriter(os.Stdout, logFile)
+	log.SetOutput(multiWriter)
+	gin.DefaultWriter = multiWriter
+	gin.DefaultErrorWriter = multiWriter
+	log.Printf("Logging to %s", logPath)
+	return logFile
 }

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -69,13 +70,13 @@ func callOpenAIForMealImage(ctx context.Context, imageBytes []byte) (string, err
 					"fat":      map[string]any{"type": "number"},
 					"carbs":    map[string]any{"type": "number"},
 				},
+				"additionalProperties": false,
 				"required": []string{
 					"calories",
 					"protein",
 					"fat",
 					"carbs",
 				},
-				"additionalProperties": false,
 			},
 			"error": map[string]any{
 				"type": "null",
@@ -178,8 +179,8 @@ calories は kcal、protein / fat / carbs は g として数値で返してく�
 		return "", err
 	}
 
-	fmt.Printf(
-		"[OpenAI usage] meal-image input=%d output=%d total=%d\n",
+	log.Printf(
+		"[OpenAI usage] meal-image input=%d output=%d total=%d",
 		out.Usage.InputTokens,
 		out.Usage.OutputTokens,
 		out.Usage.TotalTokens,

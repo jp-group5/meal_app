@@ -3,12 +3,14 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"math"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
-	"io"
 
 	"meal_back/models"
 	"meal_back/pkg/response"
@@ -409,18 +411,17 @@ func (h *NutritionHandler) GetRecommendation(c *gin.Context) {
 		response.Error(c, http.StatusInternalServerError, codeNutritionDBError, "Failed to build recommendation context.")
 		return
 	}
-	
-	//Change to use AI
-	"""
-	recommendation := buildRecommendationFromPrompt(targetDate, promptData)
-	response.Success(c, http.StatusOK, recommendation)
-	"""
+
 	recommendation, err := h.buildRecommendationWithAI(c.Request.Context(), targetDate, promptData)
 	if err != nil {
-		response.Error(c, http.StatusInternalServerError, codeNutritionDBError, err.Error())
+		log.Printf("[AI recommendation fallback] user_id=%d date=%s reason=%v", userID, targetDate.Format(dateLayout), err)
+		fallback := buildRecommendationFromPrompt(targetDate, promptData)
+		fallback["source"] = "rule_fallback"
+		response.Success(c, http.StatusOK, fallback)
 		return
 	}
-	response.Success(c, http.StatusOK, recommendation)
+
+	response.Success(c, http.StatusOK, buildCompatibleRecommendationPayload(targetDate, recommendation))
 }
 
 func (h *NutritionHandler) PreviewRecommendationPrompt(c *gin.Context) {
@@ -707,6 +708,53 @@ func buildRecommendationFromPrompt(targetDate time.Time, promptData *recommendat
 		"selection_guidance": "Choose one option based on your schedule, appetite, and meal preparation time.",
 		"prompt_json":        promptData,
 		"prompt_version":     "v2",
+	}
+}
+
+func buildCompatibleRecommendationPayload(targetDate time.Time, aiResp *aiRecommendationResponse) gin.H {
+	date := targetDate.Format(dateLayout)
+	if strings.TrimSpace(aiResp.Date) != "" {
+		date = strings.TrimSpace(aiResp.Date)
+	}
+
+	title := "Daily Nutrition Recommendation"
+	reason := "AI recommendation generated from your profile and activity data."
+	suggestedMeals := []gin.H{}
+
+	choices := make([]gin.H, 0, len(aiResp.Choices))
+	for _, choice := range aiResp.Choices {
+		choiceMeals := make([]gin.H, 0, len(choice.SuggestedMeals))
+		for _, meal := range choice.SuggestedMeals {
+			choiceMeals = append(choiceMeals, gin.H{
+				"type":    strings.ToLower(strings.TrimSpace(meal.Type)),
+				"content": strings.TrimSpace(meal.Content),
+			})
+		}
+
+		if len(suggestedMeals) == 0 {
+			if strings.TrimSpace(choice.Title) != "" {
+				title = strings.TrimSpace(choice.Title)
+			}
+			if strings.TrimSpace(choice.Reason) != "" {
+				reason = strings.TrimSpace(choice.Reason)
+			}
+			suggestedMeals = choiceMeals
+		}
+
+		choices = append(choices, gin.H{
+			"title":          strings.TrimSpace(choice.Title),
+			"reason":         strings.TrimSpace(choice.Reason),
+			"suggestedMeals": choiceMeals,
+		})
+	}
+
+	return gin.H{
+		"date":           date,
+		"title":          title,
+		"reason":         reason,
+		"suggestedMeals": suggestedMeals,
+		"choices":        choices,
+		"source":         "ai",
 	}
 }
 
@@ -1031,21 +1079,36 @@ func (h *NutritionHandler) AnalyzeMealImage(c *gin.Context) {
 		return
 	}
 
+	mealTypeRaw := firstNotEmpty(c.PostForm("type"), c.PostForm("mealType"))
+	if strings.TrimSpace(mealTypeRaw) == "" {
+		mealTypeRaw = "lunch"
+	}
+	mealType, err := normalizeMealType(mealTypeRaw)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, codeNutritionInvalidParam, err.Error())
+		return
+	}
+
 	analysis, err := analyzeMealImageWithAI(c.Request.Context(), imageBytes)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, codeNutritionDBError, err.Error())
 		return
 	}
 
+	content := strings.TrimSpace(strings.Join(analysis.Contents, ", "))
+	if content == "" {
+		content = "AI analyzed meal"
+	}
+
 	record := models.MealRecord{
 		UserID:   userID,
-		Date:     mealDate.Format(dateLayout),
-		Type:     "meal",
-		Content:  strings.Join(analysis.Contents, ", "),
-		Calories: analysis.TotalNutrition.Calories,
-		Protein:  analysis.TotalNutrition.Protein,
-		Carbs:    analysis.TotalNutrition.Carbs,
-		Fat:      analysis.TotalNutrition.Fat,
+		Date:     mealDate,
+		Type:     mealType,
+		Content:  content,
+		Calories: intPointerFromFloat(analysis.TotalNutrition.Calories),
+		Protein:  floatPointerIfPositive(analysis.TotalNutrition.Protein),
+		Carbs:    floatPointerIfPositive(analysis.TotalNutrition.Carbs),
+		Fat:      floatPointerIfPositive(analysis.TotalNutrition.Fat),
 		Source:   "ai_image",
 	}
 
@@ -1058,4 +1121,23 @@ func (h *NutritionHandler) AnalyzeMealImage(c *gin.Context) {
 		"analysis": analysis,
 		"meal":     toMealPayload(record),
 	})
+}
+
+func intPointerFromFloat(value float64) *int {
+	if value <= 0 {
+		return nil
+	}
+	rounded := int(math.Round(value))
+	if rounded <= 0 {
+		return nil
+	}
+	return &rounded
+}
+
+func floatPointerIfPositive(value float64) *float64 {
+	if value <= 0 {
+		return nil
+	}
+	result := value
+	return &result
 }

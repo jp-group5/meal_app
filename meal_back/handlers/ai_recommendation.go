@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -13,8 +14,8 @@ import (
 )
 
 type aiRecommendationResponse struct {
-	Date    string         `json:"date"`
-	Choices []aiChoice    `json:"choices"`
+	Date    string     `json:"date"`
+	Choices []aiChoice `json:"choices"`
 }
 
 type aiChoice struct {
@@ -79,6 +80,10 @@ Here is the context JSON:
 		result.Date = targetDate.Format(dateLayout)
 	}
 
+	if rendered, marshalErr := json.Marshal(result); marshalErr == nil {
+		log.Printf("[AI recommendation] %s", string(rendered))
+	}
+
 	return &result, nil
 }
 
@@ -112,18 +117,18 @@ func callOpenAIForRecommendation(ctx context.Context, prompt string) (string, er
 									"type":    map[string]any{"type": "string"},
 									"content": map[string]any{"type": "string"},
 								},
-								"required":             []string{"type", "content"},
 								"additionalProperties": false,
+								"required":             []string{"type", "content"},
 							},
 						},
 					},
-					"required":             []string{"title", "reason", "suggestedMeals"},
 					"additionalProperties": false,
+					"required":             []string{"title", "reason", "suggestedMeals"},
 				},
 			},
 		},
-		"required":             []string{"date", "choices"},
 		"additionalProperties": false,
+		"required":             []string{"date", "choices"},
 	}
 
 	body := map[string]any{
@@ -196,7 +201,7 @@ func callOpenAIForRecommendation(ctx context.Context, prompt string) (string, er
 		return "", err
 	}
 
-	fmt.Printf("[OpenAI usage] input=%d output=%d total=%d\n",
+	log.Printf("[OpenAI usage] input=%d output=%d total=%d",
 		out.Usage.InputTokens,
 		out.Usage.OutputTokens,
 		out.Usage.TotalTokens,

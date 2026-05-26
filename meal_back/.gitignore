@@ -10,5 +10,6 @@ coverage/
 *.swo
 *.tmp
 docs/*.local.md
-scripts/local/
+scripts/local/test_ai_recommendation.sh
 json/
+log/
