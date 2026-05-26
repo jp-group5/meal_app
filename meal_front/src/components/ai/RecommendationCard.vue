@@ -5,6 +5,7 @@ import type { AIRecommendation } from '../../types/aiRecommendation'
 const props = defineProps<{
   recommendation: AIRecommendation
   isAccepting?: boolean
+  acceptLabel: string
 }>()
 
 const emit = defineEmits<{
@@ -36,7 +37,7 @@ const hasNutrition = computed(() =>
         :disabled="isAccepting"
         @click="emit('accept', recommendation)"
       >
-        {{ isAccepting ? 'Saving' : 'Accept as Dinner' }}
+        {{ isAccepting ? 'Saving' : acceptLabel }}
       </button>
     </div>
 
