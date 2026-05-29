@@ -98,9 +98,22 @@ input {
   margin-bottom: 1.5rem;
 }
 
-.topbar strong {
+.topbar strong,
+.brand-name {
   display: block;
-  font-size: 1.05rem;
+  font-size: 1.45rem;
+  line-height: 1.1;
+}
+
+.brand-name {
+  color: #18212f;
+  letter-spacing: 0;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.brand-accent {
+  color: #1f6f63;
 }
 
 .topbar-kicker {
@@ -114,34 +127,57 @@ input {
   display: flex;
   align-items: center;
   gap: 0.65rem;
+  position: relative;
 }
 
-.dashboard-link {
-  border: 1px solid #1f6f63;
-  border-radius: 6px;
-  color: #1f6f63;
-  padding: 0.58rem 0.85rem;
-  text-decoration: none;
-}
-
-.dashboard-link:hover {
-  background: #eef8f5;
-}
-
-.avatar-link {
+.avatar-button {
   display: grid;
   width: 2.5rem;
   height: 2.5rem;
   place-items: center;
+  border: 0;
   border-radius: 999px;
   color: #ffffff;
   background: #1f6f63;
   font-weight: 800;
+  padding: 0;
+}
+
+.avatar-button:hover {
+  background: #17574d;
+}
+
+.account-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 20;
+  display: grid;
+  min-width: 9rem;
+  border: 1px solid #d8dee6;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 12px 28px rgba(24, 33, 47, 0.16);
+  padding: 0.35rem;
+}
+
+.account-menu-item {
+  width: 100%;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #263241;
+  padding: 0.62rem 0.7rem;
+  text-align: left;
   text-decoration: none;
 }
 
-.avatar-link:hover {
-  background: #17574d;
+.account-menu-item:hover {
+  background: #f3f6f9;
+}
+
+.account-menu-danger {
+  color: #b42318;
 }
 
 .login-link {

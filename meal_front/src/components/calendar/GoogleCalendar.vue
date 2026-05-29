@@ -410,7 +410,7 @@ function toLocalDateKey(date: Date) {
 <template>
   <div class="calendar-container">
     <div class="header-actions">
-      <h2>Google Calendar integration</h2>
+      <h2>Calendar</h2>
       <div class="calendar-toolbar">
         <input
           :value="selectedDate"
@@ -419,13 +419,13 @@ function toLocalDateKey(date: Date) {
           @input="handleDateInput"
         />
         <button class="auth-button" type="button" :disabled="!isAuthReady" @click="handleAuth">
-          Access calendar
+          Connect
         </button>
       </div>
     </div>
 
     <p class="calendar-hint">
-      Meal colors show type. Google Calendar activities are shown in green. Select a date to open the detail view.
+      Select a date to view meals and activities.
     </p>
     <p v-if="authMessage" class="auth-message">{{ authMessage }}</p>
     

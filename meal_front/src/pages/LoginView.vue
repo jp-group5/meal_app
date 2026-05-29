@@ -213,9 +213,8 @@ function isValidEmail(value: string) {
 <template>
   <section class="login-page">
     <div class="login-panel">
-      <p class="eyebrow">Account Access</p>
-      <h2>Sign in to Meal App</h2>
-      <p class="subtle-text">Sign in to access Dashboard, Profile, and AI recommendations.</p>
+      <p class="eyebrow">Account</p>
+      <h2>Sign in</h2>
 
       <form class="auth-form" @submit.prevent="handleLogin">
         <label class="field-label" for="login-username">Username</label>
@@ -246,7 +245,7 @@ function isValidEmail(value: string) {
         <button type="submit" :disabled="loginLoading">{{ loginLoading ? 'Signing in...' : 'Sign in' }}</button>
       </form>
 
-      <button type="button" class="secondary-button" @click="openRegisterPanel">Create account</button>
+      <button type="button" class="secondary-button" @click="openRegisterPanel">Create an account</button>
     </div>
 
     <div v-if="showRegisterPanel" class="modal-mask" @click.self="closeRegisterPanel">

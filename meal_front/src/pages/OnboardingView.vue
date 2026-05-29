@@ -130,14 +130,12 @@ function shouldFallbackToLocal(error: unknown) {
   <section class="page">
     <div class="page-header">
       <div>
-        <p class="eyebrow">Onboarding</p>
-        <h2>Complete your basic profile</h2>
+        <p class="eyebrow">Setup</p>
+        <h2>Basic profile</h2>
       </div>
     </div>
 
     <section class="panel onboarding-panel">
-      <p class="subtle-text">Please complete this questionnaire after registration. You can keep editing it on the Profile page later.</p>
-
       <form class="questionnaire-form" @submit.prevent="submitQuestionnaire">
         <label class="field-label" for="height-cm">Height (cm)</label>
         <input id="height-cm" v-model="form.heightCm" inputmode="decimal" placeholder="e.g. 170" required />
@@ -146,7 +144,7 @@ function shouldFallbackToLocal(error: unknown) {
         <input id="weight-kg" v-model="form.weightKg" inputmode="decimal" placeholder="e.g. 62" required />
 
         <fieldset class="checkbox-group">
-          <legend class="field-label">Training experience (multiple choices allowed)</legend>
+          <legend class="field-label">Training experience</legend>
           <label v-for="option in trainingOptions" :key="option.value" class="checkbox-row">
             <input v-model="form.trainingExperience" type="checkbox" :value="option.value" />
             <span>{{ option.label }}</span>
@@ -154,14 +152,14 @@ function shouldFallbackToLocal(error: unknown) {
         </fieldset>
 
         <fieldset class="radio-group">
-          <legend class="field-label">Goal (single choice)</legend>
+          <legend class="field-label">Goal</legend>
           <label v-for="option in goalOptions" :key="option.value" class="checkbox-row">
             <input v-model="form.fitnessGoal" type="radio" name="fitness-goal" :value="option.value" />
             <span>{{ option.label }}</span>
           </label>
         </fieldset>
 
-        <label class="field-label" for="monthly-budget">Monthly food budget limit</label>
+        <label class="field-label" for="monthly-budget">Monthly food budget</label>
         <input
           id="monthly-budget"
           v-model="form.monthlyFoodBudget"
@@ -174,7 +172,7 @@ function shouldFallbackToLocal(error: unknown) {
         <p v-if="infoMessage" class="success-message">{{ infoMessage }}</p>
 
         <button type="submit" :disabled="loading">
-          {{ loading ? 'Submitting...' : 'Submit and save profile' }}
+          {{ loading ? 'Saving...' : 'Save profile' }}
         </button>
       </form>
     </section>

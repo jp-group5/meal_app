@@ -53,7 +53,7 @@ const selectedLanguage = ref<RecommendationLanguage>('en')
 
 const hasRecommendations = computed(() => recommendations.value.length > 0)
 const selectedMealLabel = computed(() => toTitleCase(selectedMealType.value))
-const acceptLabel = computed(() => `Accept as ${selectedMealLabel.value}`)
+const acceptLabel = computed(() => `Save as ${selectedMealLabel.value}`)
 const heading = computed(() => `${selectedMealLabel.value} recommendations`)
 
 watch(
@@ -95,7 +95,7 @@ async function handleAccept(recommendation: AIRecommendation) {
   const selectedMeal = suggestedSelectedMeal ?? fallbackMeal
 
   if (!selectedMeal) {
-    errorMessage.value = 'This recommendation has no meal details to save.'
+    errorMessage.value = 'No meal details to save.'
     acceptingId.value = null
     return
   }
@@ -114,7 +114,7 @@ async function handleAccept(recommendation: AIRecommendation) {
 
   try {
     await acceptRecommendationAsMeal(payload)
-    successMessage.value = `${selectedMeal.content} was saved as ${selectedMealType.value}.`
+    successMessage.value = `Saved: ${selectedMeal.content}`
     emit('accepted', {
       recommendationId: recommendation.id,
       name: selectedMeal.content,
@@ -126,7 +126,7 @@ async function handleAccept(recommendation: AIRecommendation) {
       fat: recommendation.fat ?? null,
     })
   } catch (error) {
-    errorMessage.value = 'Could not save this recommendation. Please try again.'
+    errorMessage.value = 'Could not save. Please try again.'
   } finally {
     acceptingId.value = null
   }
@@ -145,12 +145,12 @@ function getRecommendationErrorMessage(error: unknown) {
   const bizCode = getBusinessErrorCode(error)
 
   if (bizCode === 10005 || /auth|authorization|token|login|session/i.test(message)) {
-    return 'Please log in before requesting AI recommendations.'
+    return 'Please log in to use AI recommendations.'
   }
 
   return message
-    ? `AI recommendations are unavailable: ${message}`
-    : 'AI recommendations are unavailable. Please try again later.'
+    ? `AI is unavailable: ${message}`
+    : 'AI is unavailable. Please try again later.'
 }
 
 function getBusinessErrorCode(error: unknown) {
@@ -166,7 +166,7 @@ function getBusinessErrorCode(error: unknown) {
   <section class="panel ai-dashboard">
       <header class="ai-dashboard-header">
         <div>
-          <p class="eyebrow">AI Decision Dashboard</p>
+          <p class="eyebrow">AI meals</p>
           <h3>{{ heading }}</h3>
         </div>
 
@@ -212,8 +212,8 @@ function getBusinessErrorCode(error: unknown) {
         </TransitionGroup>
 
         <div v-else class="ai-empty">
-          <h3>No recommendations yet</h3>
-          <p>Refresh after adding meals or activities for this date.</p>
+          <h3>No suggestions yet</h3>
+          <p>Add context or refresh.</p>
         </div>
       </Transition>
   </section>

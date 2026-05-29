@@ -123,7 +123,7 @@ async function logout() {
     <div class="page-header">
       <div>
         <p class="eyebrow">Profile</p>
-        <h2>User profile</h2>
+        <h2>Profile</h2>
       </div>
     </div>
 
@@ -133,14 +133,14 @@ async function logout() {
       </div>
 
       <div class="profile-details">
-        <p class="label">Current user</p>
+        <p class="label">User</p>
         <h3>{{ name || 'Guest' }}</h3>
         <p class="subtle-text">User ID: {{ id || 'not signed in' }}</p>
       </div>
     </section>
 
     <section class="panel form-panel">
-      <h3 class="section-title">Basic profile (editable anytime)</h3>
+      <h3 class="section-title">Basics</h3>
       <form class="profile-form" @submit.prevent="saveProfile">
         <label class="field-label" for="profile-height">Height (cm)</label>
         <input id="profile-height" v-model="form.heightCm" inputmode="decimal" required />
@@ -149,7 +149,7 @@ async function logout() {
         <input id="profile-weight" v-model="form.weightKg" inputmode="decimal" required />
 
         <fieldset class="checkbox-group">
-          <legend class="field-label">Training experience (multiple choices allowed)</legend>
+          <legend class="field-label">Training experience</legend>
           <label v-for="option in trainingOptions" :key="option.value" class="checkbox-row">
             <input v-model="form.trainingExperience" type="checkbox" :value="option.value" />
             <span>{{ option.label }}</span>
@@ -157,14 +157,14 @@ async function logout() {
         </fieldset>
 
         <fieldset class="radio-group">
-          <legend class="field-label">Goal (single choice)</legend>
+          <legend class="field-label">Goal</legend>
           <label v-for="option in goalOptions" :key="option.value" class="checkbox-row">
             <input v-model="form.fitnessGoal" type="radio" name="profile-goal" :value="option.value" />
             <span>{{ option.label }}</span>
           </label>
         </fieldset>
 
-        <label class="field-label" for="profile-budget">Monthly food budget limit</label>
+        <label class="field-label" for="profile-budget">Monthly food budget</label>
         <input id="profile-budget" v-model="form.monthlyFoodBudget" inputmode="numeric" required />
 
         <p v-if="saveError" class="error-message">{{ saveError }}</p>

@@ -38,6 +38,7 @@ const { selectedDate, selectedMonth } = storeToRefs(dateStore)
 const localMeals = ref<Meal[]>(loadLocalMeals())
 const googleEvents = ref<CalendarDisplayEvent[]>([])
 const detailDate = ref<string | null>(null)
+const isDetailOpen = ref(true)
 const isAiDrawerOpen = ref(false)
 const isGraphPanelOpen = ref(true)
 const formMessage = ref('')
@@ -101,14 +102,17 @@ function saveLocalMeals() {
 
 function openDateDetail(date: string) {
   detailDate.value = date
+  isDetailOpen.value = true
   dateStore.setSelectedDate(date)
   formMessage.value = ''
 }
 
-function closeDateDetail() {
-  detailDate.value = null
-  isAiDrawerOpen.value = false
-  formMessage.value = ''
+function toggleDateDetail() {
+  isDetailOpen.value = !isDetailOpen.value
+
+  if (!isDetailOpen.value) {
+    isAiDrawerOpen.value = false
+  }
 }
 
 function handleCalendarEventsLoaded(events: CalendarDisplayEvent[]) {
@@ -397,8 +401,8 @@ function getBusinessErrorCode(error: unknown) {
     <section class="page dashboard-main">
       <div class="page-header">
       <div>
-        <p class="eyebrow">Unified Workspace</p>
-        <h2>Meal Records + AI Recommendation Workspace</h2>
+        <p class="eyebrow">Dashboard</p>
+        <h2>Meals, calendar, and AI</h2>
       </div>
 
       <div class="toolbar">
@@ -421,12 +425,12 @@ function getBusinessErrorCode(error: unknown) {
 
     <div class="content-grid">
       <section class="panel">
-        <p class="label">Current month</p>
+        <p class="label">Month</p>
         <strong>{{ selectedMonth }}</strong>
       </section>
 
       <section class="panel">
-        <p class="label">Current date</p>
+        <p class="label">Date</p>
         <strong>{{ selectedDate }}</strong>
       </section>
     </div>
@@ -434,22 +438,33 @@ function getBusinessErrorCode(error: unknown) {
     <section v-if="hasDetailDate" class="detail-page">
       <div class="detail-header">
         <div>
-          <p class="eyebrow">Selected Date</p>
+          <p class="eyebrow">Selected</p>
           <h3>{{ detailDate }}</h3>
         </div>
 
         <div class="detail-actions">
-          <button type="button" class="button-outline" @click="isAiDrawerOpen = true">Ask AI</button>
-          <button type="button" class="button-outline" @click="closeDateDetail">Close</button>
+          <button v-if="isDetailOpen" type="button" class="ask-ai-button" @click="isAiDrawerOpen = true">
+            <span class="sparkle sparkle-one" aria-hidden="true"></span>
+            <span class="sparkle sparkle-two" aria-hidden="true"></span>
+            <span class="sparkle sparkle-three" aria-hidden="true"></span>
+            <span class="sparkle sparkle-four" aria-hidden="true"></span>
+            <span class="sparkle sparkle-five" aria-hidden="true"></span>
+            <span class="sparkle sparkle-six" aria-hidden="true"></span>
+            <span class="sparkle sparkle-seven" aria-hidden="true"></span>
+            Ask AI
+          </button>
+          <button type="button" class="button-outline" @click="toggleDateDetail">
+            {{ isDetailOpen ? 'Close' : 'Open' }}
+          </button>
         </div>
       </div>
 
-      <div class="detail-grid">
+      <div v-if="isDetailOpen" class="detail-grid">
         <section class="panel">
           <div class="section-header">
             <div>
               <p class="label">Meals</p>
-              <h3>Daily meal records</h3>
+              <h3>Food log</h3>
             </div>
           </div>
 
@@ -462,21 +477,21 @@ function getBusinessErrorCode(error: unknown) {
                 <option value="snack">Snack</option>
               </select>
 
-              <input v-model="mealForm.content" aria-label="Meal details" placeholder="Meal details" />
+              <input v-model="mealForm.content" aria-label="Food" placeholder="Food" />
             </div>
 
             <div class="meal-form-nutrients">
-              <input v-model="mealForm.calories" aria-label="Calories" inputmode="numeric" placeholder="Calories" />
+              <input v-model="mealForm.calories" aria-label="Calories" inputmode="numeric" placeholder="kcal" />
               <input v-model="mealForm.protein" aria-label="Protein" inputmode="decimal" placeholder="Protein g" />
               <input v-model="mealForm.fat" aria-label="Fat" inputmode="decimal" placeholder="Fat g" />
               <input v-model="mealForm.carbs" aria-label="Carbs" inputmode="decimal" placeholder="Carbs g" />
-              <button type="submit">Add record</button>
+              <button type="submit">Add</button>
             </div>
           </form>
 
           <div class="image-ai-tools">
             <button type="button" class="button-outline" :disabled="aiImageLoading" @click="openImageUpload">
-              {{ aiImageLoading ? 'Analyzing image...' : 'Upload image for AI analysis' }}
+              {{ aiImageLoading ? 'Analyzing...' : 'Analyze photo' }}
             </button>
             <input
               ref="imageInput"
@@ -489,14 +504,14 @@ function getBusinessErrorCode(error: unknown) {
 
           <section v-if="aiImageResult" class="ai-image-result">
             <div>
-              <p class="label">AI image result</p>
+              <p class="label">Photo result</p>
               <strong>{{ aiImageResult.content }}</strong>
               <p class="subtle-text">
                 {{ aiImageResult.calories || '--' }} kcal / P {{ aiImageResult.protein || '--' }}g / F
                 {{ aiImageResult.fat || '--' }}g / C {{ aiImageResult.carbs || '--' }}g
               </p>
             </div>
-            <button type="button" class="button-outline" @click="applyAiImageResult">Copy to form</button>
+            <button type="button" class="button-outline" @click="applyAiImageResult">Use</button>
           </section>
 
           <p v-if="formMessage" class="info-message">{{ formMessage }}</p>
@@ -524,14 +539,14 @@ function getBusinessErrorCode(error: unknown) {
             </li>
           </ul>
 
-          <p v-else class="subtle-text">No meal records yet.</p>
+          <p v-else class="subtle-text">No meals yet.</p>
         </section>
 
         <section class="panel">
           <div class="section-header">
             <div>
               <p class="label">Calendar</p>
-              <h3>Google Calendar activities</h3>
+              <h3>Activities</h3>
             </div>
           </div>
 
@@ -546,14 +561,14 @@ function getBusinessErrorCode(error: unknown) {
             </li>
           </ul>
 
-          <p v-else class="subtle-text">No Google Calendar activities for this date.</p>
+          <p v-else class="subtle-text">No activities for this date.</p>
         </section>
       </div>
     </section>
 
     <section v-else class="panel empty-detail">
-      <p class="label">Date details</p>
-      <strong>Select a date on the calendar to view meals and activities.</strong>
+      <p class="label">Details</p>
+      <strong>Select a date to view meals and activities.</strong>
     </section>
 
     <div v-if="isAiDrawerOpen && detailDate" class="drawer-backdrop" @click.self="isAiDrawerOpen = false">
@@ -708,6 +723,248 @@ select {
 
 .button-outline:hover {
   background: #f3f6f9;
+}
+
+.ask-ai-button {
+  position: relative;
+  isolation: isolate;
+  overflow: visible;
+  border: 0;
+  background: linear-gradient(135deg, #1f6f63, #2f8f7f);
+  color: #ffffff;
+  box-shadow:
+    0 10px 22px rgba(31, 111, 99, 0.24),
+    0 0 0 1px rgba(255, 255, 255, 0.28) inset;
+  font-weight: 800;
+  transition:
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+}
+
+.ask-ai-button::before {
+  position: absolute;
+  inset: -60% auto -60% -35%;
+  z-index: -1;
+  width: 48%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.42), transparent);
+  content: "";
+  transform: rotate(18deg);
+  transition: transform 0.55s ease;
+}
+
+.ask-ai-button:hover {
+  box-shadow:
+    0 14px 28px rgba(31, 111, 99, 0.32),
+    0 0 0 1px rgba(255, 255, 255, 0.34) inset;
+  transform: translateY(-1px);
+}
+
+.ask-ai-button:hover::before {
+  transform: translateX(280%) rotate(18deg);
+}
+
+.ask-ai-button:active {
+  transform: translateY(0);
+}
+
+.sparkle {
+  position: absolute;
+  width: 0.38rem;
+  height: 0.38rem;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.4) rotate(45deg);
+}
+
+.sparkle::before,
+.sparkle::after {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  content: "";
+}
+
+.sparkle::after {
+  transform: rotate(90deg);
+}
+
+.sparkle-one {
+  top: 0.35rem;
+  right: 0.55rem;
+}
+
+.sparkle-two {
+  bottom: 0.42rem;
+  left: 0.62rem;
+  width: 0.3rem;
+  height: 0.3rem;
+}
+
+.sparkle-three {
+  top: 50%;
+  right: 1.15rem;
+  width: 0.24rem;
+  height: 0.24rem;
+}
+
+.sparkle-four {
+  top: 0.05rem;
+  left: 1.35rem;
+  width: 0.26rem;
+  height: 0.26rem;
+}
+
+.sparkle-five {
+  top: 0.2rem;
+  right: 2.15rem;
+  width: 0.32rem;
+  height: 0.32rem;
+}
+
+.sparkle-six {
+  bottom: 0.12rem;
+  right: 0.75rem;
+  width: 0.22rem;
+  height: 0.22rem;
+}
+
+.sparkle-seven {
+  top: 0.65rem;
+  left: 0.35rem;
+  width: 0.2rem;
+  height: 0.2rem;
+}
+
+.ask-ai-button:hover .sparkle-one {
+  animation: sparkle-float-one 0.9s ease-in-out infinite;
+}
+
+.ask-ai-button:hover .sparkle-two {
+  animation: sparkle-float-two 1.05s ease-in-out infinite 0.12s;
+}
+
+.ask-ai-button:hover .sparkle-three {
+  animation: sparkle-float-three 0.8s ease-in-out infinite 0.22s;
+}
+
+.ask-ai-button:hover .sparkle-four {
+  animation: sparkle-rise-one 1.25s ease-out infinite 0.05s;
+}
+
+.ask-ai-button:hover .sparkle-five {
+  animation: sparkle-rise-two 1.35s ease-out infinite 0.32s;
+}
+
+.ask-ai-button:hover .sparkle-six {
+  animation: sparkle-rise-three 1.15s ease-out infinite 0.18s;
+}
+
+.ask-ai-button:hover .sparkle-seven {
+  animation: sparkle-rise-four 1.45s ease-out infinite 0.46s;
+}
+
+@keyframes sparkle-float-one {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translateY(0) scale(0.35) rotate(45deg);
+  }
+
+  45% {
+    opacity: 0.95;
+    transform: translate(-0.15rem, -0.28rem) scale(1) rotate(45deg);
+  }
+}
+
+@keyframes sparkle-float-two {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translateY(0) scale(0.35) rotate(45deg);
+  }
+
+  50% {
+    opacity: 0.88;
+    transform: translate(0.12rem, 0.22rem) scale(0.9) rotate(45deg);
+  }
+}
+
+@keyframes sparkle-float-three {
+  0%,
+  100% {
+    opacity: 0;
+    transform: translateY(0) scale(0.35) rotate(45deg);
+  }
+
+  50% {
+    opacity: 0.82;
+    transform: translate(0.18rem, -0.12rem) scale(0.75) rotate(45deg);
+  }
+}
+
+@keyframes sparkle-rise-one {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.3) rotate(45deg);
+  }
+
+  22% {
+    opacity: 0.95;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-0.35rem, -1.55rem) scale(1.05) rotate(45deg);
+  }
+}
+
+@keyframes sparkle-rise-two {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.3) rotate(45deg);
+  }
+
+  24% {
+    opacity: 0.9;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(0.3rem, -1.75rem) scale(0.9) rotate(45deg);
+  }
+}
+
+@keyframes sparkle-rise-three {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.25) rotate(45deg);
+  }
+
+  28% {
+    opacity: 0.82;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(0.25rem, -1.25rem) scale(0.72) rotate(45deg);
+  }
+}
+
+@keyframes sparkle-rise-four {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.25) rotate(45deg);
+  }
+
+  20% {
+    opacity: 0.8;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translate(-0.25rem, -1.45rem) scale(0.65) rotate(45deg);
+  }
 }
 
 .info-message {

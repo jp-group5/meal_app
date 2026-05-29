@@ -12,7 +12,7 @@ const { name, allergies, dietaryPreferences } = storeToRefs(userStore)
     <div class="page-header">
       <div>
         <p class="eyebrow">Settings</p>
-        <h2>Preference settings</h2>
+        <h2>Preferences</h2>
       </div>
     </div>
 
