@@ -6,8 +6,17 @@ import {
   acceptRecommendationAsMeal,
   fetchAIRecommendations,
 } from '../../services/aiRecommendationApi'
+import type { RecommendationLanguage } from '../../api/recommendation'
 import type { MealType } from '../../types'
 import type { AIRecommendation, CreateMealPayload } from '../../types/aiRecommendation'
+
+type AISelectableMealType = Extract<MealType, 'breakfast' | 'lunch' | 'dinner'>
+
+const AI_MEAL_TYPES: AISelectableMealType[] = ['breakfast', 'lunch', 'dinner']
+const AI_LANGUAGES: Array<{ value: RecommendationLanguage; label: string }> = [
+  { value: 'en', label: 'English' },
+  { value: 'ja', label: 'Japanese' },
+]
 
 const props = withDefaults(
   defineProps<{
@@ -27,6 +36,9 @@ const emit = defineEmits<{
       date: string
       mealType: MealType
       calories: number | null
+      protein: number | null
+      carbs: number | null
+      fat: number | null
     },
   ]
 }>()
@@ -36,14 +48,23 @@ const isLoading = ref(false)
 const errorMessage = ref('')
 const acceptingId = ref<string | null>(null)
 const successMessage = ref('')
+const selectedMealType = ref<AISelectableMealType>(normalizeAISelectableMealType(props.mealType))
+const selectedLanguage = ref<RecommendationLanguage>('en')
 
 const hasRecommendations = computed(() => recommendations.value.length > 0)
-const selectedMealLabel = computed(() => toTitleCase(props.mealType))
+const selectedMealLabel = computed(() => toTitleCase(selectedMealType.value))
 const acceptLabel = computed(() => `Accept as ${selectedMealLabel.value}`)
 const heading = computed(() => `${selectedMealLabel.value} recommendations`)
 
 watch(
-  () => [props.selectedDate, props.mealType],
+  () => props.mealType,
+  (mealType) => {
+    selectedMealType.value = normalizeAISelectableMealType(mealType)
+  },
+)
+
+watch(
+  () => [props.selectedDate, selectedMealType.value, selectedLanguage.value],
   () => {
     void loadRecommendations()
   },
@@ -56,9 +77,9 @@ async function loadRecommendations() {
   successMessage.value = ''
 
   try {
-    recommendations.value = await fetchAIRecommendations(props.selectedDate)
+    recommendations.value = await fetchAIRecommendations(props.selectedDate, selectedMealType.value, selectedLanguage.value)
   } catch (error) {
-    errorMessage.value = 'AI recommendations are unavailable. Please try again later.'
+    errorMessage.value = getRecommendationErrorMessage(error)
   } finally {
     isLoading.value = false
   }
@@ -69,7 +90,7 @@ async function handleAccept(recommendation: AIRecommendation) {
   errorMessage.value = ''
   successMessage.value = ''
 
-  const suggestedSelectedMeal = recommendation.suggestedMeals.find((meal) => meal.type === props.mealType)
+  const suggestedSelectedMeal = recommendation.suggestedMeals.find((meal) => meal.type === selectedMealType.value)
   const fallbackMeal = recommendation.suggestedMeals[0]
   const selectedMeal = suggestedSelectedMeal ?? fallbackMeal
 
@@ -81,7 +102,7 @@ async function handleAccept(recommendation: AIRecommendation) {
 
   const payload: CreateMealPayload = {
     content: selectedMeal.content,
-    mealType: props.mealType,
+    mealType: selectedMealType.value,
     date: props.selectedDate,
     calories: recommendation.calories,
     protein: recommendation.protein,
@@ -93,13 +114,16 @@ async function handleAccept(recommendation: AIRecommendation) {
 
   try {
     await acceptRecommendationAsMeal(payload)
-    successMessage.value = `${selectedMeal.content} was saved as ${props.mealType}.`
+    successMessage.value = `${selectedMeal.content} was saved as ${selectedMealType.value}.`
     emit('accepted', {
       recommendationId: recommendation.id,
       name: selectedMeal.content,
       date: props.selectedDate,
-      mealType: props.mealType,
+      mealType: selectedMealType.value,
       calories: recommendation.calories ?? null,
+      protein: recommendation.protein ?? null,
+      carbs: recommendation.carbs ?? null,
+      fat: recommendation.fat ?? null,
     })
   } catch (error) {
     errorMessage.value = 'Could not save this recommendation. Please try again.'
@@ -111,6 +135,31 @@ async function handleAccept(recommendation: AIRecommendation) {
 function toTitleCase(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
+
+function normalizeAISelectableMealType(mealType: MealType): AISelectableMealType {
+  return AI_MEAL_TYPES.includes(mealType as AISelectableMealType) ? (mealType as AISelectableMealType) : 'dinner'
+}
+
+function getRecommendationErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : ''
+  const bizCode = getBusinessErrorCode(error)
+
+  if (bizCode === 10005 || /auth|authorization|token|login|session/i.test(message)) {
+    return 'Please log in before requesting AI recommendations.'
+  }
+
+  return message
+    ? `AI recommendations are unavailable: ${message}`
+    : 'AI recommendations are unavailable. Please try again later.'
+}
+
+function getBusinessErrorCode(error: unknown) {
+  if (typeof error === 'object' && error !== null && 'bizCode' in error) {
+    return (error as { bizCode?: number }).bizCode
+  }
+
+  return undefined
+}
 </script>
 
 <template>
@@ -121,14 +170,23 @@ function toTitleCase(value: string) {
           <h3>{{ heading }}</h3>
         </div>
 
-        <button
-          class="button-outline"
-          type="button"
-          :disabled="isLoading"
-          @click="loadRecommendations"
-        >
-          Refresh
-        </button>
+        <div class="ai-dashboard-actions">
+          <select v-model="selectedMealType" aria-label="Select meal type for AI recommendations">
+            <option v-for="mealType in AI_MEAL_TYPES" :key="mealType" :value="mealType">
+              {{ toTitleCase(mealType) }}
+            </option>
+          </select>
+
+          <select v-model="selectedLanguage" aria-label="Select AI recommendation language">
+            <option v-for="language in AI_LANGUAGES" :key="language.value" :value="language.value">
+              {{ language.label }}
+            </option>
+          </select>
+
+          <button class="button-outline" type="button" :disabled="isLoading" @click="loadRecommendations">
+            Refresh
+          </button>
+        </div>
       </header>
 
       <p v-if="successMessage" class="ai-message ai-message-success">
@@ -176,6 +234,22 @@ function toTitleCase(value: string) {
 
 .ai-dashboard-header h3 {
   margin: 0;
+}
+
+.ai-dashboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.ai-dashboard-actions select {
+  min-width: 8rem;
+  border: 1px solid #d8dee6;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #263241;
+  padding: 0.56rem 0.7rem;
 }
 
 .button-outline {

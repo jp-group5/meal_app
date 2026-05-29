@@ -72,7 +72,10 @@ type activityRequest struct {
 }
 
 type recommendationRequest struct {
-	Date string `json:"date" binding:"required"`
+	Date          string `json:"date" binding:"required"`
+	MealType      string `json:"mealType"`
+	MealTypeSnake string `json:"meal_type"`
+	Language      string `json:"language"`
 }
 
 func (h *NutritionHandler) UpsertPreferences(c *gin.Context) {
@@ -406,22 +409,34 @@ func (h *NutritionHandler) GetRecommendation(c *gin.Context) {
 		return
 	}
 
+	mealType, err := normalizeRecommendationMealType(firstNotEmpty(req.MealTypeSnake, req.MealType))
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, codeNutritionInvalidParam, err.Error())
+		return
+	}
+
+	language, err := normalizeRecommendationLanguage(req.Language)
+	if err != nil {
+		response.Error(c, http.StatusBadRequest, codeNutritionInvalidParam, err.Error())
+		return
+	}
+
 	promptData, err := h.buildRecommendationPrompt(userID, targetDate)
 	if err != nil {
 		response.Error(c, http.StatusInternalServerError, codeNutritionDBError, "Failed to build recommendation context.")
 		return
 	}
 
-	recommendation, err := h.buildRecommendationWithAI(c.Request.Context(), targetDate, promptData)
+	recommendation, err := h.buildRecommendationWithAI(c.Request.Context(), targetDate, promptData, mealType, language)
 	if err != nil {
-		log.Printf("[AI recommendation fallback] user_id=%d date=%s reason=%v", userID, targetDate.Format(dateLayout), err)
-		fallback := buildRecommendationFromPrompt(targetDate, promptData)
+		log.Printf("[AI recommendation fallback] user_id=%d date=%s meal_type=%s language=%s reason=%v", userID, targetDate.Format(dateLayout), mealType, language, err)
+		fallback := buildRecommendationFromPrompt(targetDate, promptData, mealType, language)
 		fallback["source"] = "rule_fallback"
 		response.Success(c, http.StatusOK, fallback)
 		return
 	}
 
-	response.Success(c, http.StatusOK, buildCompatibleRecommendationPayload(targetDate, recommendation))
+	response.Success(c, http.StatusOK, buildCompatibleRecommendationPayload(targetDate, recommendation, mealType, language))
 }
 
 func (h *NutritionHandler) PreviewRecommendationPrompt(c *gin.Context) {
@@ -620,64 +635,65 @@ func (h *NutritionHandler) buildRecommendationPrompt(userID uint, targetDate tim
 	}, nil
 }
 
-func buildRecommendationFromPrompt(targetDate time.Time, promptData *recommendationPromptData) gin.H {
+func buildRecommendationFromPrompt(targetDate time.Time, promptData *recommendationPromptData, mealType string, language string) gin.H {
 	goal := promptData.User.FitnessGoal
 	avgCalories := promptData.Context.MealStats.AverageDailyCalories
 	activity := promptData.Context.ActivityIntensityStat
 	highIntensityCount := activity["high"]
 
-	baseTitle := "Daily Nutrition Recommendation"
-	baseReason := "These options are generated from your profile, recent meal records, and this week's activities."
+	mealLabel := localizedMealLabel(mealType, language)
+	baseTitle := fallbackBaseTitle(mealLabel, language)
+	baseReason := fallbackBaseReason(language)
 
 	switch goal {
 	case "lose_weight":
-		baseTitle = "Fat Loss Nutrition Options"
-		baseReason = "Your goal is fat loss, so these options prioritize protein, fiber, and controlled refined carbs."
+		baseTitle = fallbackGoalTitle("lose_weight", mealLabel, language)
+		baseReason = fallbackGoalReason("lose_weight", language)
 	case "build_muscle":
-		baseTitle = "Muscle Gain Nutrition Options"
-		baseReason = "Your goal is muscle gain, so these options increase quality protein and complex carbs around training."
+		baseTitle = fallbackGoalTitle("build_muscle", mealLabel, language)
+		baseReason = fallbackGoalReason("build_muscle", language)
 	case "maintain_shape":
-		baseTitle = "Body Maintenance Nutrition Options"
-		baseReason = "Your goal is maintenance, so these options keep intake stable and meals consistent."
+		baseTitle = fallbackGoalTitle("maintain_shape", mealLabel, language)
+		baseReason = fallbackGoalReason("maintain_shape", language)
 	}
 
 	if highIntensityCount >= 2 {
-		baseReason += " You had multiple high-intensity sessions this week, so moderate carb replenishment is included."
+		baseReason += fallbackHighIntensityReason(language)
 	}
 	if avgCalories > 0 && avgCalories < 1400 {
-		baseReason += " Recent average calories are low, so options avoid prolonged under-fueling."
+		baseReason += fallbackLowCalorieReason(language)
 	}
 
 	options := []gin.H{
 		{
-			"optionId": "plan-a",
-			"title":    "Option A - Balanced Performance",
-			"reason":   baseReason + " This option balances satiety and recovery.",
-			"suggestedMeals": []gin.H{
-				{"type": "breakfast", "content": "Greek yogurt oatmeal bowl + boiled egg + berries"},
-				{"type": "lunch", "content": "Chicken and brown rice salad bowl + avocado"},
-				{"type": "dinner", "content": "Steamed fish + broccoli + sweet potato"},
-			},
+			"optionId":       "plan-a",
+			"title":          fallbackOptionTitle("balanced", language),
+			"reason":         baseReason + fallbackOptionReason("balanced", language),
+			"calories":       fallbackCalories(mealType, "balanced"),
+			"protein":        fallbackProtein(mealType, "balanced"),
+			"carbs":          fallbackCarbs(mealType, "balanced"),
+			"fat":            fallbackFat(mealType, "balanced"),
+			"suggestedMeals": []gin.H{buildFallbackSuggestedMeal(mealType, "balanced", language)},
 		},
 		{
-			"optionId": "plan-b",
-			"title":    "Option B - Higher Protein",
-			"reason":   baseReason + " This option increases protein density across all meals.",
-			"suggestedMeals": []gin.H{
-				{"type": "breakfast", "content": "Egg white omelet + cottage cheese + apple"},
-				{"type": "lunch", "content": "Turkey quinoa bowl + mixed greens"},
-				{"type": "dinner", "content": "Grilled salmon + asparagus + lentils"},
-			},
+			"optionId":       "plan-b",
+			"title":          fallbackOptionTitle("protein", language),
+			"reason":         baseReason + fallbackOptionReason("protein", language),
+			"calories":       fallbackCalories(mealType, "protein"),
+			"protein":        fallbackProtein(mealType, "protein"),
+			"carbs":          fallbackCarbs(mealType, "protein"),
+			"fat":            fallbackFat(mealType, "protein"),
+			"suggestedMeals": []gin.H{buildFallbackSuggestedMeal(mealType, "protein", language)},
 		},
 		{
-			"optionId": "plan-c",
-			"title":    "Option C - Quick Prep",
-			"reason":   baseReason + " This option is designed for lower preparation time.",
-			"suggestedMeals": []gin.H{
-				{"type": "breakfast", "content": "Protein smoothie + banana + peanut-free granola"},
-				{"type": "lunch", "content": "Tuna whole-grain wrap + side salad"},
-				{"type": "dinner", "content": "Tofu stir-fry + microwave brown rice + vegetables"},
-			},
+			"optionId":       "plan-c",
+			"title":          fallbackOptionTitle("quick", language),
+			"reason":         baseReason + fallbackOptionReason("quick", language),
+			"calories":       fallbackCalories(mealType, "quick"),
+			"protein":        fallbackProtein(mealType, "quick"),
+			"carbs":          fallbackCarbs(mealType, "quick"),
+			"fat":            fallbackFat(mealType, "quick"),
+			"suggestedMeals": []gin.H{buildFallbackSuggestedMeal(mealType, "quick", language)},
 		},
 	}
 
@@ -688,7 +704,7 @@ func buildRecommendationFromPrompt(targetDate time.Time, promptData *recommendat
 			if !ok || len(meals) == 0 {
 				continue
 			}
-			meals[0]["content"] = fmt.Sprintf("Preference-based (%s): soy milk + whole-grain toast + mixed nuts", pref)
+			meals[0]["content"] = fallbackPreferenceMeal(mealType, pref, language)
 			options[idx]["suggestedMeals"] = meals
 		}
 	}
@@ -701,17 +717,23 @@ func buildRecommendationFromPrompt(targetDate time.Time, promptData *recommendat
 		"title":              baseTitle,
 		"default_choice":     primary["title"],
 		"reason":             primary["reason"],
+		"calories":           primary["calories"],
+		"protein":            primary["protein"],
+		"carbs":              primary["carbs"],
+		"fat":                primary["fat"],
 		"suggestedMeals":     primary["suggestedMeals"],
 		"recommendationId":   recommendationID,
 		"choice_count":       len(options),
 		"choices":            options,
 		"selection_guidance": "Choose one option based on your schedule, appetite, and meal preparation time.",
+		"meal_type":          mealType,
+		"language":           language,
 		"prompt_json":        promptData,
 		"prompt_version":     "v2",
 	}
 }
 
-func buildCompatibleRecommendationPayload(targetDate time.Time, aiResp *aiRecommendationResponse) gin.H {
+func buildCompatibleRecommendationPayload(targetDate time.Time, aiResp *aiRecommendationResponse, mealType string, language string) gin.H {
 	date := targetDate.Format(dateLayout)
 	if strings.TrimSpace(aiResp.Date) != "" {
 		date = strings.TrimSpace(aiResp.Date)
@@ -723,13 +745,7 @@ func buildCompatibleRecommendationPayload(targetDate time.Time, aiResp *aiRecomm
 
 	choices := make([]gin.H, 0, len(aiResp.Choices))
 	for _, choice := range aiResp.Choices {
-		choiceMeals := make([]gin.H, 0, len(choice.SuggestedMeals))
-		for _, meal := range choice.SuggestedMeals {
-			choiceMeals = append(choiceMeals, gin.H{
-				"type":    strings.ToLower(strings.TrimSpace(meal.Type)),
-				"content": strings.TrimSpace(meal.Content),
-			})
-		}
+		choiceMeals := normalizeRecommendationChoiceMeals(choice.SuggestedMeals, mealType)
 
 		if len(suggestedMeals) == 0 {
 			if strings.TrimSpace(choice.Title) != "" {
@@ -744,18 +760,331 @@ func buildCompatibleRecommendationPayload(targetDate time.Time, aiResp *aiRecomm
 		choices = append(choices, gin.H{
 			"title":          strings.TrimSpace(choice.Title),
 			"reason":         strings.TrimSpace(choice.Reason),
+			"calories":       choice.Calories,
+			"protein":        choice.Protein,
+			"carbs":          choice.Carbs,
+			"fat":            choice.Fat,
 			"suggestedMeals": choiceMeals,
 		})
+	}
+
+	calories := 0
+	protein := 0.0
+	carbs := 0.0
+	fat := 0.0
+	if len(aiResp.Choices) > 0 {
+		calories = aiResp.Choices[0].Calories
+		protein = aiResp.Choices[0].Protein
+		carbs = aiResp.Choices[0].Carbs
+		fat = aiResp.Choices[0].Fat
 	}
 
 	return gin.H{
 		"date":           date,
 		"title":          title,
 		"reason":         reason,
+		"calories":       calories,
+		"protein":        protein,
+		"carbs":          carbs,
+		"fat":            fat,
 		"suggestedMeals": suggestedMeals,
 		"choices":        choices,
+		"meal_type":      mealType,
+		"language":       language,
 		"source":         "ai",
 	}
+}
+
+func normalizeRecommendationChoiceMeals(meals []aiSuggestedMeal, mealType string) []gin.H {
+	choiceMeals := []gin.H{}
+	fallbackContent := ""
+
+	for _, meal := range meals {
+		content := strings.TrimSpace(meal.Content)
+		if content == "" {
+			continue
+		}
+
+		if strings.ToLower(strings.TrimSpace(meal.Type)) == mealType {
+			choiceMeals = append(choiceMeals, gin.H{
+				"type":    mealType,
+				"content": content,
+			})
+			break
+		}
+
+		if fallbackContent == "" {
+			fallbackContent = content
+		}
+	}
+
+	if len(choiceMeals) > 0 {
+		return choiceMeals
+	}
+
+	if fallbackContent != "" {
+		return []gin.H{{"type": mealType, "content": fallbackContent}}
+	}
+
+	return choiceMeals
+}
+
+func buildFallbackSuggestedMeal(mealType string, style string, language string) gin.H {
+	contentByStyle := map[string]map[string]map[string]string{
+		"en": {
+			"balanced": {
+				"breakfast": "Greek yogurt oatmeal bowl + boiled egg + berries",
+				"lunch":     "Chicken and brown rice salad bowl + avocado",
+				"dinner":    "Steamed fish + broccoli + sweet potato",
+			},
+			"protein": {
+				"breakfast": "Egg white omelet + cottage cheese + apple",
+				"lunch":     "Turkey quinoa bowl + mixed greens",
+				"dinner":    "Grilled salmon + asparagus + lentils",
+			},
+			"quick": {
+				"breakfast": "Protein smoothie + banana + peanut-free granola",
+				"lunch":     "Tuna whole-grain wrap + side salad",
+				"dinner":    "Tofu stir-fry + microwave brown rice + vegetables",
+			},
+		},
+		"ja": {
+			"balanced": {
+				"breakfast": "ギリシャヨーグルトとオートミール、ゆで卵、ベリー",
+				"lunch":     "鶏むね肉と玄米のサラダボウル、アボカド添え",
+				"dinner":    "白身魚の蒸し焼き、ブロッコリー、さつまいも",
+			},
+			"protein": {
+				"breakfast": "卵白オムレツ、カッテージチーズ、りんご",
+				"lunch":     "ターキーとキヌアのボウル、ミックスグリーン",
+				"dinner":    "グリルサーモン、アスパラガス、レンズ豆",
+			},
+			"quick": {
+				"breakfast": "プロテインスムージー、バナナ、ナッツ不使用グラノーラ",
+				"lunch":     "ツナの全粒粉ラップ、サイドサラダ",
+				"dinner":    "豆腐と野菜の炒め物、電子レンジ調理の玄米",
+			},
+		},
+	}
+
+	content := contentByStyle[language][style][mealType]
+	if content == "" {
+		content = "Balanced protein meal + vegetables + complex carbs"
+		if language == "ja" {
+			content = "たんぱく質、野菜、複合炭水化物を組み合わせた食事"
+		}
+	}
+
+	return gin.H{"type": mealType, "content": content}
+}
+
+func fallbackCalories(mealType string, style string) int {
+	values := map[string]map[string]int{
+		"balanced": {"breakfast": 420, "lunch": 560, "dinner": 520},
+		"protein":  {"breakfast": 390, "lunch": 520, "dinner": 560},
+		"quick":    {"breakfast": 360, "lunch": 460, "dinner": 480},
+	}
+	return values[style][mealType]
+}
+
+func fallbackProtein(mealType string, style string) float64 {
+	values := map[string]map[string]float64{
+		"balanced": {"breakfast": 28, "lunch": 38, "dinner": 36},
+		"protein":  {"breakfast": 34, "lunch": 42, "dinner": 40},
+		"quick":    {"breakfast": 24, "lunch": 32, "dinner": 30},
+	}
+	return values[style][mealType]
+}
+
+func fallbackCarbs(mealType string, style string) float64 {
+	values := map[string]map[string]float64{
+		"balanced": {"breakfast": 48, "lunch": 62, "dinner": 46},
+		"protein":  {"breakfast": 28, "lunch": 44, "dinner": 34},
+		"quick":    {"breakfast": 52, "lunch": 48, "dinner": 58},
+	}
+	return values[style][mealType]
+}
+
+func fallbackFat(mealType string, style string) float64 {
+	values := map[string]map[string]float64{
+		"balanced": {"breakfast": 12, "lunch": 18, "dinner": 16},
+		"protein":  {"breakfast": 14, "lunch": 16, "dinner": 22},
+		"quick":    {"breakfast": 10, "lunch": 14, "dinner": 13},
+	}
+	return values[style][mealType]
+}
+
+func fallbackPreferenceMeal(mealType string, preference string, language string) string {
+	if language == "ja" {
+		switch mealType {
+		case "breakfast":
+			return fmt.Sprintf("嗜好（%s）に合わせた豆乳、全粒粉トースト、ナッツ", preference)
+		case "lunch":
+			return fmt.Sprintf("嗜好（%s）に合わせた穀物ボウル、低脂肪たんぱく質、季節野菜", preference)
+		case "dinner":
+			return fmt.Sprintf("嗜好（%s）に合わせた軽めのたんぱく質プレート、野菜、適量の複合炭水化物", preference)
+		default:
+			return fmt.Sprintf("嗜好（%s）に合わせたバランスのよい食事", preference)
+		}
+	}
+
+	switch mealType {
+	case "breakfast":
+		return fmt.Sprintf("Preference-based (%s): soy milk + whole-grain toast + mixed nuts", preference)
+	case "lunch":
+		return fmt.Sprintf("Preference-based (%s): grain bowl + lean protein + seasonal vegetables", preference)
+	case "dinner":
+		return fmt.Sprintf("Preference-based (%s): light protein plate + vegetables + moderate complex carbs", preference)
+	default:
+		return fmt.Sprintf("Preference-based (%s): balanced meal + vegetables + complex carbs", preference)
+	}
+}
+
+func fallbackBaseTitle(mealLabel string, language string) string {
+	if language == "ja" {
+		return mealLabel + "の栄養提案"
+	}
+	return mealLabel + " Nutrition Recommendation"
+}
+
+func fallbackBaseReason(language string) string {
+	if language == "ja" {
+		return "プロフィール、最近の食事記録、今週の活動量をもとに作成した提案です。"
+	}
+	return "These options are generated from your profile, recent meal records, and this week's activities."
+}
+
+func fallbackGoalTitle(goal string, mealLabel string, language string) string {
+	if language == "ja" {
+		switch goal {
+		case "lose_weight":
+			return mealLabel + "向け減量サポート"
+		case "build_muscle":
+			return mealLabel + "向け筋肉づくりサポート"
+		case "maintain_shape":
+			return mealLabel + "向け体型維持サポート"
+		}
+	}
+
+	switch goal {
+	case "lose_weight":
+		return "Fat Loss " + mealLabel + " Options"
+	case "build_muscle":
+		return "Muscle Gain " + mealLabel + " Options"
+	case "maintain_shape":
+		return "Body Maintenance " + mealLabel + " Options"
+	default:
+		return mealLabel + " Nutrition Recommendation"
+	}
+}
+
+func fallbackGoalReason(goal string, language string) string {
+	if language == "ja" {
+		switch goal {
+		case "lose_weight":
+			return "減量目標に合わせ、たんぱく質、食物繊維、精製炭水化物の量を意識しています。"
+		case "build_muscle":
+			return "筋肉づくりの目標に合わせ、良質なたんぱく質と運動前後の炭水化物を意識しています。"
+		case "maintain_shape":
+			return "体型維持の目標に合わせ、摂取量と食事内容を安定させる構成です。"
+		}
+	}
+
+	switch goal {
+	case "lose_weight":
+		return "Your goal is fat loss, so these options prioritize protein, fiber, and controlled refined carbs."
+	case "build_muscle":
+		return "Your goal is muscle gain, so these options increase quality protein and complex carbs around training."
+	case "maintain_shape":
+		return "Your goal is maintenance, so these options keep intake stable and meals consistent."
+	default:
+		return fallbackBaseReason(language)
+	}
+}
+
+func fallbackHighIntensityReason(language string) string {
+	if language == "ja" {
+		return " 今週は高強度の活動が複数あるため、適度な炭水化物補給も含めています。"
+	}
+	return " You had multiple high-intensity sessions this week, so moderate carb replenishment is included."
+}
+
+func fallbackLowCalorieReason(language string) string {
+	if language == "ja" {
+		return " 最近の平均摂取カロリーが低めのため、過度なエネルギー不足を避ける内容です。"
+	}
+	return " Recent average calories are low, so options avoid prolonged under-fueling."
+}
+
+func fallbackOptionTitle(style string, language string) string {
+	if language == "ja" {
+		switch style {
+		case "balanced":
+			return "オプションA - バランス重視"
+		case "protein":
+			return "オプションB - 高たんぱく"
+		case "quick":
+			return "オプションC - 時短"
+		}
+	}
+
+	switch style {
+	case "balanced":
+		return "Option A - Balanced Performance"
+	case "protein":
+		return "Option B - Higher Protein"
+	case "quick":
+		return "Option C - Quick Prep"
+	default:
+		return "Option"
+	}
+}
+
+func fallbackOptionReason(style string, language string) string {
+	if language == "ja" {
+		switch style {
+		case "balanced":
+			return " 満足感と回復のバランスを意識した選択肢です。"
+		case "protein":
+			return " たんぱく質量を高めた選択肢です。"
+		case "quick":
+			return " 調理時間を抑えやすい選択肢です。"
+		}
+	}
+
+	switch style {
+	case "balanced":
+		return " This option balances satiety and recovery."
+	case "protein":
+		return " This option increases protein density across all meals."
+	case "quick":
+		return " This option is designed for lower preparation time."
+	default:
+		return ""
+	}
+}
+
+func localizedMealLabel(mealType string, language string) string {
+	if language == "ja" {
+		switch mealType {
+		case "breakfast":
+			return "朝食"
+		case "lunch":
+			return "昼食"
+		case "dinner":
+			return "夕食"
+		}
+	}
+	return toTitleCase(mealType)
+}
+
+func toTitleCase(value string) string {
+	text := strings.TrimSpace(value)
+	if text == "" {
+		return ""
+	}
+
+	return strings.ToUpper(text[:1]) + text[1:]
 }
 
 func toMealPayload(record models.MealRecord) gin.H {
@@ -955,6 +1284,43 @@ func normalizeMealType(raw string) (string, error) {
 	default:
 		return "", errors.New("meal type must be one of breakfast/lunch/dinner/snack.")
 	}
+}
+
+func normalizeRecommendationMealType(raw string) (string, error) {
+	text := strings.ToLower(strings.TrimSpace(raw))
+	if text == "" {
+		return "dinner", nil
+	}
+
+	switch text {
+	case "breakfast", "lunch", "dinner":
+		return text, nil
+	default:
+		return "", errors.New("meal_type must be one of breakfast/lunch/dinner.")
+	}
+}
+
+func normalizeRecommendationLanguage(raw string) (string, error) {
+	text := strings.ToLower(strings.TrimSpace(raw))
+	if text == "" {
+		return "en", nil
+	}
+
+	switch text {
+	case "en", "english":
+		return "en", nil
+	case "ja", "jp", "japanese":
+		return "ja", nil
+	default:
+		return "", errors.New("language must be one of en/ja.")
+	}
+}
+
+func recommendationLanguageName(language string) string {
+	if language == "ja" {
+		return "Japanese"
+	}
+	return "English"
 }
 
 func normalizeIntensity(raw string) string {

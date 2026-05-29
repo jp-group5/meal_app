@@ -1,5 +1,5 @@
 import { createMeal } from '@/api/meal'
-import { getRecommendation } from '@/api/recommendation'
+import { getRecommendation, type RecommendationLanguage } from '@/api/recommendation'
 import type { MealType } from '@/types'
 import type { AIRecommendation, CreateMealPayload } from '../types/aiRecommendation'
 
@@ -11,18 +11,30 @@ interface BackendSuggestedMeal {
 interface BackendChoice {
   title?: string
   reason?: string
+  calories?: number
+  protein?: number
+  carbs?: number
+  fat?: number
   suggestedMeals?: BackendSuggestedMeal[]
 }
 
 interface BackendRecommendationPayload {
   title?: string
   reason?: string
+  calories?: number
+  protein?: number
+  carbs?: number
+  fat?: number
   suggestedMeals?: BackendSuggestedMeal[]
   choices?: BackendChoice[]
 }
 
-export async function fetchAIRecommendations(date: string): Promise<AIRecommendation[]> {
-  const response = await getRecommendation(date)
+export async function fetchAIRecommendations(
+  date: string,
+  mealType: MealType,
+  language: RecommendationLanguage,
+): Promise<AIRecommendation[]> {
+  const response = await getRecommendation(date, mealType, language)
   const payload = response.data as BackendRecommendationPayload | undefined
 
   if (!payload) {
@@ -32,7 +44,17 @@ export async function fetchAIRecommendations(date: string): Promise<AIRecommenda
   const sourceChoices =
     Array.isArray(payload.choices) && payload.choices.length > 0
       ? payload.choices
-      : [{ title: payload.title, reason: payload.reason, suggestedMeals: payload.suggestedMeals }]
+      : [
+          {
+            title: payload.title,
+            reason: payload.reason,
+            calories: payload.calories,
+            protein: payload.protein,
+            carbs: payload.carbs,
+            fat: payload.fat,
+            suggestedMeals: payload.suggestedMeals,
+          },
+        ]
 
   return sourceChoices
     .map((choice, index) => mapChoiceToRecommendation(choice, date, index))
@@ -64,9 +86,17 @@ function mapChoiceToRecommendation(choice: BackendChoice, date: string, index: n
     id: `rec-${date}-${index + 1}`,
     name,
     reason: `${choice.reason ?? ''}`.trim(),
+    calories: normalizeNutritionNumber(choice.calories),
+    protein: normalizeNutritionNumber(choice.protein),
+    carbs: normalizeNutritionNumber(choice.carbs),
+    fat: normalizeNutritionNumber(choice.fat),
     tags,
     suggestedMeals: meals,
   }
+}
+
+function normalizeNutritionNumber(value: number | undefined) {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined
 }
 
 function normalizeSuggestedMeals(meals: BackendSuggestedMeal[] | undefined) {

@@ -53,7 +53,7 @@ const hasNutrition = computed(() =>
 
     <ul v-if="recommendation.suggestedMeals.length" class="recommendation-meals">
       <li v-for="meal in recommendation.suggestedMeals" :key="`${meal.type}-${meal.content}`">
-        <strong>{{ meal.type }}</strong>: {{ meal.content }}
+        {{ meal.content }}
       </li>
     </ul>
 

@@ -264,6 +264,9 @@ function handleRecommendationAccepted(payload: {
   date: string
   mealType: MealType
   calories: number | null
+  protein: number | null
+  carbs: number | null
+  fat: number | null
 }) {
   if (payload.date !== detailDate.value) {
     return
@@ -276,9 +279,9 @@ function handleRecommendationAccepted(payload: {
       type: payload.mealType,
       content: payload.name,
       calories: payload.calories ?? undefined,
-      protein: 32,
-      fat: 18,
-      carbs: 42,
+      protein: payload.protein ?? undefined,
+      fat: payload.fat ?? undefined,
+      carbs: payload.carbs ?? undefined,
     },
     ...localMeals.value,
   ]
@@ -383,7 +386,12 @@ function getBusinessErrorCode(error: unknown) {
 <template>
   <div class="dashboard-layout" :class="{ 'is-graph-panel-collapsed': !isGraphPanelOpen }">
     <aside class="dashboard-sidebar" aria-label="Nutrition graphs">
-      <GraphPanel :open="isGraphPanelOpen" @toggle="isGraphPanelOpen = !isGraphPanelOpen" />
+      <GraphPanel
+        :meals="localMeals"
+        :open="isGraphPanelOpen"
+        :selected-date="selectedDate"
+        @toggle="isGraphPanelOpen = !isGraphPanelOpen"
+      />
     </aside>
 
     <section class="page dashboard-main">

@@ -12,15 +12,12 @@
     </button>
 
     <div class="graph-panel" :aria-hidden="!open">
-      <div v-if="loading" class="loading">
-        データを取得中...
-      </div>
+      <div class="charts-container">
+        <div class="graph-header">
+          <p class="label">Last 7 days</p>
+          <strong>{{ rangeLabel }}</strong>
+        </div>
 
-      <div v-else-if="error" class="error">
-        {{ error }}
-      </div>
-
-      <div v-else-if="nutritionData" class="charts-container">
         <!-- グラフ群 -->
         <div class="charts-grid">
           <div class="chart-box">
@@ -56,14 +53,18 @@
             <p>{{ nutritionData.summary.average_carbs }} g</p>
           </div>
         </div>
+
+        <p v-if="!hasNutritionRecords" class="empty-text">
+          No nutrition records for this date range.
+        </p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
-import { fetchWeeklyNutrition } from '@/services/nutritionApi';
+import { computed } from 'vue';
+import type { Meal } from '@/types';
 import type { WeeklyNutritionResponse } from '@/types/nutrients';
 
 // vue-chartjsの設定
@@ -94,9 +95,13 @@ ChartJS.register(
 const props = withDefaults(
   defineProps<{
     open?: boolean
+    meals?: Meal[]
+    selectedDate?: string
   }>(),
   {
     open: true,
+    meals: () => [],
+    selectedDate: '',
   },
 );
 
@@ -104,27 +109,55 @@ const emit = defineEmits<{
   toggle: []
 }>();
 
-const loading = ref(true);
-const error = ref<string | null>(null);
-const nutritionData = ref<WeeklyNutritionResponse | null>(null);
 const toggleLabel = computed(() => (props.open ? '栄養グラフを閉じる' : '栄養グラフを開く'));
+const weeklyDates = computed(() => getLastSevenDates(props.selectedDate));
+const rangeLabel = computed(() => {
+  const dates = weeklyDates.value;
+  const firstDate = dates[0];
+  const lastDate = dates[dates.length - 1];
 
-// コンポーネントマウント時にデータ取得
-onMounted(async () => {
-  try {
-    loading.value = true;
-    error.value = null;
-    
-    // APIからモックデータを取得 (現在は固定の日付を指定)
-    const data = await fetchWeeklyNutrition('2026-05-06', '2026-05-12');
-    nutritionData.value = data;
-  } catch (err) {
-    error.value = 'データの取得に失敗しました';
-    console.error(err);
-  } finally {
-    loading.value = false;
+  if (!firstDate || !lastDate) {
+    return '';
   }
+
+  return `${formatShortDate(firstDate)} - ${formatShortDate(lastDate)}`;
 });
+
+const nutritionData = computed<WeeklyNutritionResponse>(() => {
+  const dailyData = weeklyDates.value.map((date) => {
+    const meals = props.meals.filter((meal) => meal.date === date);
+
+    return {
+      date,
+      total_calories: sumMealValue(meals, 'calories'),
+      total_protein: sumMealValue(meals, 'protein'),
+      total_fat: sumMealValue(meals, 'fat'),
+      total_carbs: sumMealValue(meals, 'carbs'),
+    };
+  });
+
+  const dayCount = dailyData.length || 1;
+
+  return {
+    summary: {
+      average_calories: roundNutrition(totalByKey(dailyData, 'total_calories') / dayCount),
+      average_protein: roundNutrition(totalByKey(dailyData, 'total_protein') / dayCount),
+      average_fat: roundNutrition(totalByKey(dailyData, 'total_fat') / dayCount),
+      average_carbs: roundNutrition(totalByKey(dailyData, 'total_carbs') / dayCount),
+    },
+    daily_data: dailyData,
+  };
+});
+
+const hasNutritionRecords = computed(() =>
+  nutritionData.value.daily_data.some(
+    (day) =>
+      day.total_calories > 0 ||
+      day.total_protein > 0 ||
+      day.total_fat > 0 ||
+      day.total_carbs > 0,
+  ),
+);
 
 // グラフの共通オプション
 const chartOptions = {
@@ -136,10 +169,7 @@ const chartOptions = {
 
 // 日付ラベル共通 (例: 5/6, 5/7...)
 const labels = computed(() => {
-  return nutritionData.value?.daily_data.map(d => {
-    const date = new Date(d.date);
-    return `${date.getMonth() + 1}/${date.getDate()}`;
-  }) || [];
+  return nutritionData.value.daily_data.map(d => formatShortDate(d.date));
 });
 
 const caloriesChartData = computed(() => ({
@@ -148,7 +178,7 @@ const caloriesChartData = computed(() => ({
     {
       label: 'カロリー (kcal)',
       backgroundColor: '#f87979',
-      data: nutritionData.value?.daily_data.map(d => d.total_calories) || []
+      data: nutritionData.value.daily_data.map(d => d.total_calories)
     }
   ]
 }));
@@ -160,7 +190,7 @@ const proteinChartData = computed(() => ({
       label: 'たんぱく質 (g)',
       backgroundColor: '#73b9f5',
       borderColor: '#73b9f5',
-      data: nutritionData.value?.daily_data.map(d => d.total_protein) || []
+      data: nutritionData.value.daily_data.map(d => d.total_protein)
     }
   ]
 }));
@@ -172,7 +202,7 @@ const fatChartData = computed(() => ({
       label: '脂質 (g)',
       backgroundColor: '#f5c273',
       borderColor: '#f5c273',
-      data: nutritionData.value?.daily_data.map(d => d.total_fat) || []
+      data: nutritionData.value.daily_data.map(d => d.total_fat)
     }
   ]
 }));
@@ -184,10 +214,67 @@ const carbsChartData = computed(() => ({
       label: '炭水化物 (g)',
       backgroundColor: '#82d99c',
       borderColor: '#82d99c',
-      data: nutritionData.value?.daily_data.map(d => d.total_carbs) || []
+      data: nutritionData.value.daily_data.map(d => d.total_carbs)
     }
   ]
 }));
+
+function getLastSevenDates(selectedDate: string) {
+  const endDate = parseDateInput(selectedDate) ?? new Date();
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(endDate);
+    date.setDate(endDate.getDate() - (6 - index));
+    return toDateInputValue(date);
+  });
+}
+
+function parseDateInput(value: string) {
+  const [year, month, day] = value.split('-').map(Number);
+
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  return new Date(year, month - 1, day);
+}
+
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
+}
+
+function formatShortDate(value: string) {
+  const date = parseDateInput(value);
+
+  if (!date) {
+    return value;
+  }
+
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+function sumMealValue(meals: Meal[], key: 'calories' | 'protein' | 'fat' | 'carbs') {
+  return roundNutrition(
+    meals.reduce((total, meal) => {
+      const value = meal[key];
+      return typeof value === 'number' && Number.isFinite(value) ? total + value : total;
+    }, 0),
+  );
+}
+
+function totalByKey(
+  dailyData: WeeklyNutritionResponse['daily_data'],
+  key: 'total_calories' | 'total_protein' | 'total_fat' | 'total_carbs',
+) {
+  return dailyData.reduce((total, day) => total + day[key], 0);
+}
+
+function roundNutrition(value: number) {
+  return Math.round(value * 10) / 10;
+}
 </script>
 
 <style scoped>
@@ -260,6 +347,25 @@ const carbsChartData = computed(() => ({
   transform: translateX(calc(-100% - 1rem));
 }
 
+.graph-header {
+  display: grid;
+  gap: 0.2rem;
+  margin-bottom: 1rem;
+}
+
+.graph-header .label {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.graph-header strong {
+  color: #1f2937;
+  font-size: 0.95rem;
+}
+
 h2 {
   text-align: center;
   margin-bottom: 1.5rem;
@@ -276,6 +382,13 @@ h2 {
 }
 .error {
   color: #d32f2f;
+}
+
+.empty-text {
+  margin: 0.75rem 0 0;
+  color: #64748b;
+  font-size: 0.85rem;
+  text-align: center;
 }
 
 .summary-cards {

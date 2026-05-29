@@ -21,6 +21,10 @@ type aiRecommendationResponse struct {
 type aiChoice struct {
 	Title          string            `json:"title"`
 	Reason         string            `json:"reason"`
+	Calories       int               `json:"calories"`
+	Protein        float64           `json:"protein"`
+	Carbs          float64           `json:"carbs"`
+	Fat            float64           `json:"fat"`
 	SuggestedMeals []aiSuggestedMeal `json:"suggestedMeals"`
 }
 
@@ -33,13 +37,15 @@ func (h *NutritionHandler) buildRecommendationWithAI(
 	ctx context.Context,
 	targetDate time.Time,
 	promptData *recommendationPromptData,
+	mealType string,
+	language string,
 ) (*aiRecommendationResponse, error) {
 	promptJSONBytes, err := json.MarshalIndent(promptData, "", "  ")
 	if err != nil {
 		return nil, err
 	}
 
-	prompt := fmt.Sprintf(`以下のデータをもとに、おすすめ献立を3件提案してください。
+	prompt := fmt.Sprintf(`以下のデータをもとに、%s向けのおすすめの食事を3件提案してください。
 
 条件:
 - allergies に含まれる食材は絶対に使わない
@@ -47,6 +53,12 @@ func (h *NutritionHandler) buildRecommendationWithAI(
 - fitness_goal に合う献立を優先する
 - monthly_food_budget を考慮し、現実的な献立にする
 - meal_history の days_ago は 0 が当日、1 が前日、2 が2日前を表す
+- suggestedMeals には %s の食事だけを入れる
+- breakfast/lunch/dinner など他の食事タイミングを混ぜた1日分の献立は返さない
+- 各 choice の suggestedMeals は必ず1件だけにする
+- suggestedMeals[0].type は必ず "%s" にする
+- calories は kcal、protein / carbs / fat は g として、各 choice の食事1件分の推定値を数値で返す
+- title、reason、suggestedMeals.content は必ず %s で返す
 - 出力はJSONのみ
 
 出力形式:
@@ -56,6 +68,10 @@ func (h *NutritionHandler) buildRecommendationWithAI(
     {
       "title": "string",
       "reason": "string",
+      "calories": 0,
+      "protein": 0,
+      "carbs": 0,
+      "fat": 0,
       "suggestedMeals": [
         {"type":"breakfast|lunch|dinner|snack","content":"string"}
       ]
@@ -64,9 +80,9 @@ func (h *NutritionHandler) buildRecommendationWithAI(
 }
 
 Here is the context JSON:
-%s`, string(promptJSONBytes))
+%s`, mealType, mealType, mealType, recommendationLanguageName(language), string(promptJSONBytes))
 
-	raw, err := callOpenAIForRecommendation(ctx, prompt)
+	raw, err := callOpenAIForRecommendation(ctx, prompt, mealType)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +103,7 @@ Here is the context JSON:
 	return &result, nil
 }
 
-func callOpenAIForRecommendation(ctx context.Context, prompt string) (string, error) {
+func callOpenAIForRecommendation(ctx context.Context, prompt string, mealType string) (string, error) {
 	apiKey := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	if apiKey == "" {
 		return "", errors.New("OPENAI_API_KEY is empty")
@@ -109,12 +125,18 @@ func callOpenAIForRecommendation(ctx context.Context, prompt string) (string, er
 					"properties": map[string]any{
 						"title":  map[string]any{"type": "string"},
 						"reason": map[string]any{"type": "string"},
+						"calories": map[string]any{
+							"type": "integer",
+						},
+						"protein": map[string]any{"type": "number"},
+						"carbs":   map[string]any{"type": "number"},
+						"fat":     map[string]any{"type": "number"},
 						"suggestedMeals": map[string]any{
 							"type": "array",
 							"items": map[string]any{
 								"type": "object",
 								"properties": map[string]any{
-									"type":    map[string]any{"type": "string"},
+									"type":    map[string]any{"type": "string", "enum": []string{mealType}},
 									"content": map[string]any{"type": "string"},
 								},
 								"additionalProperties": false,
@@ -123,7 +145,7 @@ func callOpenAIForRecommendation(ctx context.Context, prompt string) (string, er
 						},
 					},
 					"additionalProperties": false,
-					"required":             []string{"title", "reason", "suggestedMeals"},
+					"required":             []string{"title", "reason", "calories", "protein", "carbs", "fat", "suggestedMeals"},
 				},
 			},
 		},
