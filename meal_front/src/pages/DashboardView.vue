@@ -2,6 +2,7 @@
 import { storeToRefs } from 'pinia'
 import { computed, reactive, ref } from 'vue'
 
+import { analyzeMealImage, deleteMeal } from '@/api/meal'
 import AIDecisionDashboard from '@/components/ai/AIDecisionDashboard.vue'
 import GoogleCalendar from '@/components/calendar/GoogleCalendar.vue'
 import GraphPanel from '@/components/graph/GraphPanel.vue'
@@ -20,6 +21,14 @@ interface CalendarDisplayEvent {
   htmlLink?: string
 }
 
+type AiImageResult = {
+  content: string
+  calories: string
+  protein: string
+  fat: string
+  carbs: string
+}
+
 const LOCAL_MEALS_STORAGE_KEY = 'meal-app-local-meals'
 const MOCK_MEAL_DATE = '2026-05-31'
 
@@ -34,13 +43,7 @@ const isGraphPanelOpen = ref(true)
 const formMessage = ref('')
 const imageInput = ref<HTMLInputElement | null>(null)
 const aiImageLoading = ref(false)
-const aiImageResult = ref<{
-  content: string
-  calories: string
-  protein: string
-  fat: string
-  carbs: string
-} | null>(null)
+const aiImageResult = ref<AiImageResult | null>(null)
 
 const mealForm = reactive({
   type: 'breakfast' as MealType,
@@ -172,12 +175,34 @@ async function handleImageUpload(event: Event) {
     return
   }
 
+  if (!detailDate.value) {
+    formMessage.value = 'Please select a date before analyzing an image.'
+    input.value = ''
+    return
+  }
+
   formMessage.value = ''
   aiImageLoading.value = true
 
   try {
-    aiImageResult.value = await mockAnalyzeMealImage(file)
-    formMessage.value = 'Mock AI analyzed the image. Review and apply the result.'
+    const response = await analyzeMealImage({
+      image: file,
+      date: detailDate.value,
+      type: mealForm.type,
+    })
+    const savedMeal = response.data?.meal
+
+    if (!savedMeal) {
+      throw new Error('AI analysis succeeded, but no meal record was returned.')
+    }
+
+    localMeals.value = [savedMeal, ...localMeals.value.filter((meal) => meal.id !== savedMeal.id)]
+    saveLocalMeals()
+    aiImageResult.value = mealToAiImageResult(savedMeal)
+    formMessage.value = 'AI analyzed the image and saved the meal record.'
+  } catch (error) {
+    console.error('Could not analyze meal image.', error)
+    formMessage.value = getAiImageErrorMessage(error)
   } finally {
     aiImageLoading.value = false
     input.value = ''
@@ -194,47 +219,7 @@ function applyAiImageResult() {
   mealForm.protein = aiImageResult.value.protein
   mealForm.fat = aiImageResult.value.fat
   mealForm.carbs = aiImageResult.value.carbs
-  formMessage.value = 'Mock AI result applied. You can edit it before saving.'
-}
-
-async function mockAnalyzeMealImage(file: File) {
-  console.info('Mock analyze meal image:', file.name)
-
-  await wait(700)
-
-  const fileName = file.name.toLowerCase()
-
-  if (fileName.includes('salad')) {
-    return {
-      content: 'Chicken Salad Bowl',
-      calories: '430',
-      protein: '32',
-      fat: '18',
-      carbs: '34',
-    }
-  }
-
-  if (fileName.includes('rice') || fileName.includes('bowl')) {
-    return {
-      content: 'Rice Bowl with Grilled Meat',
-      calories: '680',
-      protein: '38',
-      fat: '24',
-      carbs: '78',
-    }
-  }
-
-  return {
-    content: 'Mixed Meal Plate',
-    calories: '560',
-    protein: '28',
-    fat: '20',
-    carbs: '62',
-  }
-}
-
-function wait(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms))
+  formMessage.value = 'AI result copied to the form. Saving it will create another meal record.'
 }
 
 function resetMealForm() {
@@ -245,7 +230,7 @@ function resetMealForm() {
   mealForm.carbs = ''
 }
 
-function deleteMealRecord(mealId: string) {
+async function deleteMealRecord(mealId: string) {
   const meal = localMeals.value.find((item) => item.id === mealId)
 
   if (!meal || !canDeleteMeal(meal)) {
@@ -256,6 +241,16 @@ function deleteMealRecord(mealId: string) {
 
   if (!shouldDelete) {
     return
+  }
+
+  if (isBackendMeal(meal)) {
+    try {
+      await deleteMeal(meal.id)
+    } catch (error) {
+      console.error('Could not delete meal record.', error)
+      formMessage.value = getMealDeleteErrorMessage(error)
+      return
+    }
   }
 
   localMeals.value = localMeals.value.filter((item) => item.id !== mealId)
@@ -321,11 +316,67 @@ function toTitleCase(value: string) {
 }
 
 function canDeleteMeal(meal: Meal) {
-  return meal.id.startsWith('local-') || meal.id.startsWith('ai-')
+  return meal.id.startsWith('local-') || meal.id.startsWith('ai-') || isBackendMeal(meal)
 }
 
 function isValidNutritionValue(value: number | undefined) {
   return value === undefined || (Number.isFinite(value) && value >= 0)
+}
+
+function isBackendMeal(meal: Meal) {
+  return /^\d+$/.test(meal.id)
+}
+
+function mealToAiImageResult(meal: Meal): AiImageResult {
+  return {
+    content: meal.content,
+    calories: formatNutritionInput(meal.calories),
+    protein: formatNutritionInput(meal.protein),
+    fat: formatNutritionInput(meal.fat),
+    carbs: formatNutritionInput(meal.carbs),
+  }
+}
+
+function formatNutritionInput(value: number | null | undefined) {
+  return value == null ? '' : `${value}`
+}
+
+function getAiImageErrorMessage(error: unknown) {
+  const message = getErrorMessage(error)
+  const bizCode = getBusinessErrorCode(error)
+
+  if (bizCode === 10005 || /auth|authorization|token|login|session/i.test(message)) {
+    return 'Please log in before using AI image analysis.'
+  }
+
+  if (/OPENAI_API_KEY|api key/i.test(message)) {
+    return 'AI image analysis is not configured. Please set OPENAI_API_KEY on the backend.'
+  }
+
+  return message ? `AI image analysis failed: ${message}` : 'AI image analysis failed. Please try again later.'
+}
+
+function getMealDeleteErrorMessage(error: unknown) {
+  const message = getErrorMessage(error)
+  const bizCode = getBusinessErrorCode(error)
+
+  if (bizCode === 10005 || /auth|authorization|token|login|session/i.test(message)) {
+    return 'Please log in before deleting this meal record.'
+  }
+
+  return message ? `Could not delete meal record: ${message}` : 'Could not delete meal record.'
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : ''
+}
+
+function getBusinessErrorCode(error: unknown) {
+  if (typeof error === 'object' && error !== null && 'bizCode' in error) {
+    return (error as { bizCode?: number }).bizCode
+  }
+
+  return undefined
 }
 </script>
 
@@ -417,7 +468,7 @@ function isValidNutritionValue(value: number | undefined) {
 
           <div class="image-ai-tools">
             <button type="button" class="button-outline" :disabled="aiImageLoading" @click="openImageUpload">
-              {{ aiImageLoading ? 'Analyzing image...' : 'Upload image for mock AI' }}
+              {{ aiImageLoading ? 'Analyzing image...' : 'Upload image for AI analysis' }}
             </button>
             <input
               ref="imageInput"
@@ -430,14 +481,14 @@ function isValidNutritionValue(value: number | undefined) {
 
           <section v-if="aiImageResult" class="ai-image-result">
             <div>
-              <p class="label">Mock AI result</p>
+              <p class="label">AI image result</p>
               <strong>{{ aiImageResult.content }}</strong>
               <p class="subtle-text">
-                {{ aiImageResult.calories }} kcal / P {{ aiImageResult.protein }}g / F
-                {{ aiImageResult.fat }}g / C {{ aiImageResult.carbs }}g
+                {{ aiImageResult.calories || '--' }} kcal / P {{ aiImageResult.protein || '--' }}g / F
+                {{ aiImageResult.fat || '--' }}g / C {{ aiImageResult.carbs || '--' }}g
               </p>
             </div>
-            <button type="button" class="button-outline" @click="applyAiImageResult">Apply to form</button>
+            <button type="button" class="button-outline" @click="applyAiImageResult">Copy to form</button>
           </section>
 
           <p v-if="formMessage" class="info-message">{{ formMessage }}</p>
