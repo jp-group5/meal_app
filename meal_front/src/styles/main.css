@@ -101,19 +101,20 @@ input {
 .topbar strong,
 .brand-name {
   display: block;
-  font-size: 1.45rem;
-  line-height: 1.1;
+  font-size: 2rem;
+  line-height: 1;
 }
 
 .brand-name {
-  color: #18212f;
+  color: #0d1724;
   letter-spacing: 0;
-  font-weight: 700;
+  font-weight: 850;
   text-decoration: none;
 }
 
 .brand-accent {
-  color: #1f6f63;
+  color: #12a36f;
+  text-shadow: 0 1px 0 rgba(18, 163, 111, 0.18);
 }
 
 .topbar-kicker {
