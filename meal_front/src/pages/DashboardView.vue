@@ -404,16 +404,6 @@ function getBusinessErrorCode(error: unknown) {
         <p class="eyebrow">Dashboard</p>
         <h2>Meals, calendar, and AI</h2>
       </div>
-
-      <div class="toolbar">
-        <input
-          :value="selectedDate"
-          type="date"
-          aria-label="Select date"
-          @input="dateStore.setSelectedDate(($event.target as HTMLInputElement).value)"
-        />
-        <button type="button" @click="dateStore.goToday">Today</button>
-      </div>
     </div>
 
     <GoogleCalendar
