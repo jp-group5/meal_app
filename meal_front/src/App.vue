@@ -35,7 +35,7 @@ async function logout() {
       <header class="topbar">
         <div>
           <RouterLink class="brand-name" to="/" aria-label="Go to dashboard">
-            <span class="brand-accent">M</span>eal <span class="brand-accent">A</span>pp
+            <span class="brand-accent">M</span>ogu <span class="brand-accent">M</span>ogu
           </RouterLink>
         </div>
 
