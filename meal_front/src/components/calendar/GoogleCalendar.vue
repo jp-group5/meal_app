@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { nextTick, onMounted, reactive, ref, watch } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import FullCalendar from '@fullcalendar/vue3';
+import type { Calendar } from '@fullcalendar/core';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import type { MealType } from '@/types';
 
@@ -100,6 +101,7 @@ const googleEvents = ref<CalendarDisplayEvent[]>([]);
 const isAuthReady = ref(false);
 const authMessage = ref('');
 const calendarWrapper = ref<HTMLElement | null>(null);
+const fullCalendar = ref<{ getApi: () => Calendar } | null>(null);
 
 const calendarOptions = reactive({
   plugins: [dayGridPlugin],
@@ -124,6 +126,9 @@ const calendarOptions = reactive({
 });
 
 let tokenClient: GoogleTokenClient | undefined;
+let calendarResizeObserver: ResizeObserver | undefined;
+let pendingResizeFrame: number | undefined;
+let pendingResizeTimers: number[] = [];
 
 watch(
   () => props.mealEvents,
@@ -143,6 +148,22 @@ watch(
 
 onMounted(() => {
   void initializeGoogleCalendar();
+  void nextTick(() => {
+    initializeCalendarResizeObserver();
+    scheduleCalendarSizeUpdate();
+  });
+});
+
+onBeforeUnmount(() => {
+  calendarResizeObserver?.disconnect();
+  calendarWrapper.value?.removeEventListener('transitionend', scheduleCalendarSizeUpdate);
+
+  if (pendingResizeFrame !== undefined) {
+    window.cancelAnimationFrame(pendingResizeFrame);
+  }
+
+  pendingResizeTimers.forEach((timer) => window.clearTimeout(timer));
+  pendingResizeTimers = [];
 });
 
 const handleAuth = () => {
@@ -333,6 +354,40 @@ function syncSelectedDateHighlight() {
   });
 }
 
+function initializeCalendarResizeObserver() {
+  const wrapper = calendarWrapper.value;
+
+  if (!wrapper || typeof ResizeObserver === 'undefined') {
+    return;
+  }
+
+  calendarResizeObserver = new ResizeObserver(() => {
+    scheduleCalendarSizeUpdate();
+  });
+  calendarResizeObserver.observe(wrapper);
+
+  wrapper.addEventListener('transitionend', scheduleCalendarSizeUpdate);
+}
+
+function scheduleCalendarSizeUpdate() {
+  if (pendingResizeFrame !== undefined) {
+    window.cancelAnimationFrame(pendingResizeFrame);
+  }
+
+  pendingResizeFrame = window.requestAnimationFrame(() => {
+    pendingResizeFrame = undefined;
+    updateCalendarSize();
+  });
+
+  pendingResizeTimers.forEach((timer) => window.clearTimeout(timer));
+  pendingResizeTimers = [120, 300].map((delay) => window.setTimeout(updateCalendarSize, delay));
+}
+
+function updateCalendarSize() {
+  fullCalendar.value?.getApi().updateSize();
+  syncSelectedDateHighlight();
+}
+
 function getMealColor(mealType: MealType | undefined) {
   return mealType ? MEAL_TYPE_COLORS[mealType] : DEFAULT_MEAL_COLOR;
 }
@@ -430,7 +485,7 @@ function toLocalDateKey(date: Date) {
     <p v-if="authMessage" class="auth-message">{{ authMessage }}</p>
     
     <div ref="calendarWrapper" class="calendar-wrapper" @click="handleCalendarClick">
-      <FullCalendar :options="calendarOptions" />
+      <FullCalendar ref="fullCalendar" :options="calendarOptions" />
     </div>
   </div>
 </template>
