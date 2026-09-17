@@ -11,7 +11,8 @@ The recommended local workflow is:
 make setup
 make dev
 ```
-
+Website (Backend is down currently):
+https://meal-app-pi-eight.vercel.app/
 ## 1. Architecture
 
 Local development uses this request flow:
